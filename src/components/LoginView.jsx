@@ -1,14 +1,31 @@
 import React, { useState } from 'react';
-import { GraduationCap, ShieldCheck, UserCheck, Briefcase, Lock, Mail, ArrowRight, CheckCircle2, Users, Building, Sparkles } from 'lucide-react';
-import { mockUsers } from '../data/mockFichas';
+import { 
+  GraduationCap, 
+  ShieldCheck, 
+  UserCheck, 
+  Briefcase, 
+  Lock, 
+  Mail, 
+  ArrowRight, 
+  CheckCircle2, 
+  Users, 
+  Building, 
+  Sparkles, 
+  AlertCircle,
+  Eye,
+  EyeOff
+} from 'lucide-react';
+import { mockUsers, validCredentials } from '../data/mockFichas';
 
 export default function LoginView({ onLogin }) {
   const [activeRoleTab, setActiveRoleTab] = useState('instructor'); // 'instructor' | 'coordinator' | 'aprendiz'
   const [email, setEmail] = useState('carlos.mendoza@sena.edu.co');
   const [password, setPassword] = useState('sena2026');
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
 
-  // Handle role tab change and fill demo credentials
+  // Handle role tab change and fill default demo credentials
   const handleTabChange = (role) => {
     setActiveRoleTab(role);
     setError('');
@@ -24,26 +41,96 @@ export default function LoginView({ onLogin }) {
     }
   };
 
-  const handleFormSubmit = (e) => {
+  // Validación estricta de credenciales
+  const handleFormSubmit = async (e) => {
     e.preventDefault();
-    if (!email || !password) {
-      setError('Por favor diligencia tus credenciales institucionales.');
+    setError('');
+
+    const cleanEmail = email.trim().toLowerCase();
+    const cleanPassword = password.trim();
+
+    if (!cleanEmail || !cleanPassword) {
+      setError('Por favor diligencia tanto el correo como la contraseña institucional.');
       return;
     }
 
-    if (activeRoleTab === 'instructor') {
-      onLogin(mockUsers.instructor);
-    } else if (activeRoleTab === 'coordinator') {
-      onLogin(mockUsers.coordinator);
-    } else {
-      onLogin(mockUsers.aprendiz);
+    setLoading(true);
+
+    // 1. Intentar validar contra el Backend API en Express / MongoDB
+    try {
+      const response = await fetch('http://localhost:5000/api/auth/login', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          email: cleanEmail,
+          password: cleanPassword,
+          rol: activeRoleTab,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (response.ok && data.success) {
+        // Almacenar token JWT si el backend está activo
+        if (data.token) {
+          localStorage.setItem('sena_token', data.token);
+        }
+        setLoading(false);
+        onLogin(data.data);
+        return;
+      } else {
+        // Si el backend rechazó la contraseña o el usuario
+        setLoading(false);
+        setError(data.message || 'Contraseña incorrecta o usuario no autorizado.');
+        return;
+      }
+    } catch (networkErr) {
+      // 2. Si el servidor backend no está encendido, validar estrictamente contra el registro local de credenciales
+      const matchedUser = validCredentials.find(
+        (cred) => cred.email.toLowerCase() === cleanEmail
+      );
+
+      if (!matchedUser) {
+        setLoading(false);
+        setError(`El correo "${cleanEmail}" no está registrado en el sistema.`);
+        return;
+      }
+
+      if (matchedUser.role !== activeRoleTab) {
+        setLoading(false);
+        setError(`Este usuario pertenece al rol "${matchedUser.role.toUpperCase()}", no a "${activeRoleTab.toUpperCase()}". Cambia de pestaña para continuar.`);
+        return;
+      }
+
+      // VALIDACIÓN ESTRICTA DE CONTRASEÑA
+      if (matchedUser.password !== cleanPassword) {
+        setLoading(false);
+        setError('❌ Contraseña incorrecta. Por favor verifica tus credenciales institucionales.');
+        return;
+      }
+
+      setLoading(false);
+      onLogin(matchedUser.user);
     }
   };
 
   const handleQuickLogin = (role) => {
-    if (role === 'instructor') onLogin(mockUsers.instructor);
-    else if (role === 'coordinator') onLogin(mockUsers.coordinator);
-    else onLogin(mockUsers.aprendiz);
+    setError('');
+    if (role === 'instructor') {
+      setEmail('carlos.mendoza@sena.edu.co');
+      setPassword('sena2026');
+      onLogin(mockUsers.instructor);
+    } else if (role === 'coordinator') {
+      setEmail('sofia.restrepo@sena.edu.co');
+      setPassword('admin2026');
+      onLogin(mockUsers.coordinator);
+    } else {
+      setEmail('aprendiz.adso@misena.edu.co');
+      setPassword('adso2026');
+      onLogin(mockUsers.aprendiz);
+    }
   };
 
   return (
@@ -165,9 +252,12 @@ export default function LoginView({ onLogin }) {
 
           {/* Form */}
           <form onSubmit={handleFormSubmit} className="space-y-4">
+            
+            {/* Error Message Box */}
             {error && (
-              <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-xs text-red-700 font-medium">
-                {error}
+              <div className="p-3.5 bg-red-50 border border-red-200 rounded-xl text-xs text-red-700 font-semibold flex items-start gap-2.5 animate-in fade-in">
+                <AlertCircle className="w-4 h-4 text-red-600 shrink-0 mt-0.5" />
+                <span>{error}</span>
               </div>
             )}
 
@@ -180,9 +270,13 @@ export default function LoginView({ onLogin }) {
                 <input
                   type="email"
                   value={email}
-                  onChange={(e) => setEmail(e.target.value)}
+                  onChange={(e) => {
+                    setEmail(e.target.value);
+                    setError('');
+                  }}
                   className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#39A900] focus:bg-white transition-all font-medium"
                   placeholder="usuario@sena.edu.co"
+                  required
                 />
               </div>
             </div>
@@ -192,28 +286,52 @@ export default function LoginView({ onLogin }) {
                 <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
                   Contraseña Institucional
                 </label>
-                <span className="text-[11px] text-[#39A900] font-semibold cursor-pointer hover:underline">
-                  ¿Olvidaste tu clave?
+                <span className="text-[11px] text-[#39A900] font-semibold">
+                  {activeRoleTab === 'instructor' && 'Demo: sena2026'}
+                  {activeRoleTab === 'coordinator' && 'Demo: admin2026'}
+                  {activeRoleTab === 'aprendiz' && 'Demo: adso2026'}
                 </span>
               </div>
               <div className="relative">
                 <Lock className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 transform -translate-y-1/2" />
                 <input
-                  type="password"
+                  type={showPassword ? 'text' : 'password'}
                   value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#39A900] focus:bg-white transition-all font-medium"
+                  onChange={(e) => {
+                    setPassword(e.target.value);
+                    setError('');
+                  }}
+                  className="w-full pl-10 pr-10 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#39A900] focus:bg-white transition-all font-medium"
                   placeholder="••••••••"
+                  required
                 />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3 top-1/2 transform -translate-y-1/2 text-slate-400 hover:text-slate-600 focus:outline-none"
+                  tabIndex="-1"
+                >
+                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
               </div>
             </div>
 
             <button
               type="submit"
-              className="w-full mt-2 bg-[#39A900] hover:bg-[#319200] text-white py-3 px-4 rounded-xl font-bold text-sm shadow-md hover:shadow-lg transition-all flex items-center justify-center gap-2 transform active:scale-98"
+              disabled={loading}
+              className="w-full mt-2 bg-[#39A900] hover:bg-[#319200] disabled:opacity-50 text-white py-3 px-4 rounded-xl font-bold text-sm shadow-md hover:shadow-lg transition-all flex items-center justify-center gap-2 transform active:scale-98"
             >
-              <span>Ingresar como {activeRoleTab === 'instructor' ? 'Instructor' : activeRoleTab === 'coordinator' ? 'Coordinador' : 'Aprendiz'}</span>
-              <ArrowRight className="w-4 h-4" />
+              {loading ? (
+                <>
+                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                  <span>Verificando credenciales...</span>
+                </>
+              ) : (
+                <>
+                  <span>Ingresar como {activeRoleTab === 'instructor' ? 'Instructor' : activeRoleTab === 'coordinator' ? 'Coordinador' : 'Aprendiz'}</span>
+                  <ArrowRight className="w-4 h-4" />
+                </>
+              )}
             </button>
           </form>
 
@@ -235,7 +353,7 @@ export default function LoginView({ onLogin }) {
                   </span>
                 </div>
                 <span className="text-[11px] text-slate-500 block mt-0.5">
-                  Instructor ADSO • Fichas & Clases
+                  Instructor ADSO • Clave: sena2026
                 </span>
               </button>
 
@@ -251,7 +369,7 @@ export default function LoginView({ onLogin }) {
                   </span>
                 </div>
                 <span className="text-[11px] text-slate-500 block mt-0.5">
-                  Coordinación • Estado Operativo
+                  Coordinación • Clave: admin2026
                 </span>
               </button>
             </div>
@@ -262,7 +380,7 @@ export default function LoginView({ onLogin }) {
         {/* Security Footer */}
         <div className="bg-slate-50 border-t border-slate-100 p-4 text-center text-xs text-slate-500 flex items-center justify-center gap-2">
           <ShieldCheck className="w-4 h-4 text-[#39A900]" />
-          <span>Acceso cifrado y autenticado bajo políticas SENA de Colombia.</span>
+          <span>Acceso autenticado con validación estricta de credenciales y JWT.</span>
         </div>
       </div>
 
@@ -273,4 +391,3 @@ export default function LoginView({ onLogin }) {
     </div>
   );
 }
-

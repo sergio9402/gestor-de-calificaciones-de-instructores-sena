@@ -123,3 +123,50 @@ export const mockUsers = {
   }
 };
 
+// Registro de credenciales oficiales para validación estricta de seguridad
+export const validCredentials = [
+  {
+    email: "carlos.mendoza@sena.edu.co",
+    password: "sena2026",
+    role: "instructor",
+    user: mockUsers.instructor
+  },
+  {
+    email: "laura.gomez@sena.edu.co",
+    password: "sena2026",
+    role: "instructor",
+    user: {
+      ...mockUsers.instructor,
+      id: 2,
+      name: "Dra. Laura Patricia Gómez",
+      email: "laura.gomez@sena.edu.co",
+      module: "Diseño Web UI/UX y Desarrollo Frontend (React & Tailwind)",
+      operationalStatus: "En Formación"
+    }
+  },
+  {
+    email: "jorge.torres@sena.edu.co",
+    password: "sena2026",
+    role: "instructor",
+    user: {
+      ...mockUsers.instructor,
+      id: 3,
+      name: "Lic. Jorge Eliecer Torres",
+      email: "jorge.torres@sena.edu.co",
+      module: "Bases de Datos Relacionales y NoSQL (MySQL, MongoDB)",
+      operationalStatus: "Disponible"
+    }
+  },
+  {
+    email: "sofia.restrepo@sena.edu.co",
+    password: "admin2026",
+    role: "coordinator",
+    user: mockUsers.coordinator
+  },
+  {
+    email: "aprendiz.adso@misena.edu.co",
+    password: "adso2026",
+    role: "aprendiz",
+    user: mockUsers.aprendiz
+  }
+];

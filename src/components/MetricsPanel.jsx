@@ -5,19 +5,39 @@ export default function MetricsPanel({ instructors, onEvaluateInstructor }) {
   const [filterModule, setFilterModule] = useState('ALL');
   const [sortField, setSortField] = useState('rating'); // 'rating', 'methodology', 'technicalDomain'
 
-  // Calculate Institutional Metrics
-  const totalEvaluations = instructors.reduce((acc, curr) => acc + curr.ratingsCount, 0);
-  const avgOverall = (instructors.reduce((acc, curr) => acc + curr.rating, 0) / instructors.length).toFixed(2);
-  const avgMethodology = (instructors.reduce((acc, curr) => acc + curr.methodology, 0) / instructors.length).toFixed(2);
-  const avgTechnical = (instructors.reduce((acc, curr) => acc + curr.technicalDomain, 0) / instructors.length).toFixed(2);
+  // Calculate Institutional Metrics reactivamente
+  const totalEvaluations = instructors.reduce(
+    (acc, curr) => acc + (curr.ratingsCount || curr.totalEvaluaciones || 0), 
+    0
+  );
+
+  const avgOverall = instructors.length > 0
+    ? (instructors.reduce((acc, curr) => acc + Number(curr.rating !== undefined ? curr.rating : (curr.promedioGeneral || 5.0)), 0) / instructors.length).toFixed(2)
+    : '5.00';
+
+  const avgMethodology = instructors.length > 0
+    ? (instructors.reduce((acc, curr) => acc + Number(curr.methodology !== undefined ? curr.methodology : (curr.promedioMetodologia || 5.0)), 0) / instructors.length).toFixed(2)
+    : '5.00';
+
+  const avgTechnical = instructors.length > 0
+    ? (instructors.reduce((acc, curr) => acc + Number(curr.technicalDomain !== undefined ? curr.technicalDomain : (curr.promedioTecnico || 5.0)), 0) / instructors.length).toFixed(2)
+    : '5.00';
 
   // Filter & Sort
   const filteredInstructors = instructors
     .filter(inst => {
       if (filterModule === 'ALL') return true;
-      return inst.module.toLowerCase().includes(filterModule.toLowerCase());
+      const mod = inst.module || inst.especialidad || '';
+      return mod.toLowerCase().includes(filterModule.toLowerCase());
     })
-    .sort((a, b) => b[sortField] - a[sortField]);
+    .sort((a, b) => {
+      const getFieldVal = (item, field) => {
+        if (field === 'rating') return Number(item.rating !== undefined ? item.rating : (item.promedioGeneral || 0));
+        if (field === 'methodology') return Number(item.methodology !== undefined ? item.methodology : (item.promedioMetodologia || 0));
+        return Number(item.technicalDomain !== undefined ? item.technicalDomain : (item.promedioTecnico || 0));
+      };
+      return getFieldVal(b, sortField) - getFieldVal(a, sortField);
+    });
 
   return (
     <div className="space-y-8 animate-in fade-in duration-300">
@@ -39,7 +59,7 @@ export default function MetricsPanel({ instructors, onEvaluateInstructor }) {
         </div>
       </div>
 
-      {/* KPI Cards Grid */}
+      {/* KPI Cards Grid Actualizados en Vivo */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {/* Card 1: Promedio Institucional */}
         <div className="bg-white p-5 rounded-2xl border border-slate-200/90 shadow-sm flex items-center justify-between">
@@ -162,12 +182,18 @@ export default function MetricsPanel({ instructors, onEvaluateInstructor }) {
         {/* Visual Bar Breakdown Chart */}
         <div className="space-y-6 pt-2">
           {filteredInstructors.map((inst, index) => {
-            const methodologyPercent = (inst.methodology / 5) * 100;
-            const technicalPercent = (inst.technicalDomain / 5) * 100;
+            const instRating = Number(inst.rating !== undefined ? inst.rating : (inst.promedioGeneral || 5.0));
+            const instMethodology = Number(inst.methodology !== undefined ? inst.methodology : (inst.promedioMetodologia || 5.0));
+            const instTechnical = Number(inst.technicalDomain !== undefined ? inst.technicalDomain : (inst.promedioTecnico || 5.0));
+            const instName = inst.name || inst.nombre || '';
+            const instModule = inst.module || inst.especialidad || '';
+
+            const methodologyPercent = Math.min(100, (instMethodology / 5) * 100);
+            const technicalPercent = Math.min(100, (instTechnical / 5) * 100);
 
             return (
               <div 
-                key={inst.id} 
+                key={inst.id || inst._id} 
                 className="p-4 rounded-2xl bg-slate-50/70 hover:bg-slate-50 border border-slate-100 transition-all hover:border-slate-200"
               >
                 {/* Instructor Row Header */}
@@ -178,26 +204,26 @@ export default function MetricsPanel({ instructors, onEvaluateInstructor }) {
                     </span>
                     <img
                       src={inst.avatar}
-                      alt={inst.name}
+                      alt={instName}
                       className="w-10 h-10 rounded-xl object-cover ring-2 ring-white shadow-2xs"
                     />
                     <div>
                       <h4 className="text-sm font-bold text-slate-900 flex items-center gap-2">
-                        {inst.name}
-                        {inst.rating >= 4.8 && (
+                        {instName}
+                        {instRating >= 4.8 && (
                           <span className="text-[10px] bg-amber-50 text-amber-700 font-bold px-1.5 py-0.2 rounded border border-amber-200 flex items-center gap-1">
                             <Sparkles className="w-2.5 h-2.5" /> Top
                           </span>
                         )}
                       </h4>
-                      <p className="text-xs text-slate-500">{inst.module}</p>
+                      <p className="text-xs text-slate-500">{instModule}</p>
                     </div>
                   </div>
 
                   <div className="flex items-center gap-3 self-end sm:self-auto">
                     <div className="text-right">
                       <span className="text-[11px] text-slate-400 block">Promedio</span>
-                      <span className="text-base font-extrabold text-[#00324D]">{inst.rating.toFixed(1)} ★</span>
+                      <span className="text-base font-extrabold text-[#00324D]">{instRating.toFixed(1)} ★</span>
                     </div>
                     <button
                       onClick={() => onEvaluateInstructor(inst)}
@@ -216,7 +242,7 @@ export default function MetricsPanel({ instructors, onEvaluateInstructor }) {
                       <span className="flex items-center gap-1">
                         <span className="w-2 h-2 rounded-full bg-[#39A900]"></span> Metodología
                       </span>
-                      <span className="font-bold text-slate-800">{inst.methodology.toFixed(1)} / 5.0</span>
+                      <span className="font-bold text-slate-800">{instMethodology.toFixed(1)} / 5.0</span>
                     </div>
                     <div className="w-full bg-slate-200/70 rounded-full h-3 overflow-hidden">
                       <div
@@ -232,7 +258,7 @@ export default function MetricsPanel({ instructors, onEvaluateInstructor }) {
                       <span className="flex items-center gap-1">
                         <span className="w-2 h-2 rounded-full bg-[#00324D]"></span> Dominio Técnico
                       </span>
-                      <span className="font-bold text-slate-800">{inst.technicalDomain.toFixed(1)} / 5.0</span>
+                      <span className="font-bold text-slate-800">{instTechnical.toFixed(1)} / 5.0</span>
                     </div>
                     <div className="w-full bg-slate-200/70 rounded-full h-3 overflow-hidden">
                       <div
@@ -250,4 +276,3 @@ export default function MetricsPanel({ instructors, onEvaluateInstructor }) {
     </div>
   );
 }
-

@@ -3,10 +3,20 @@ import { Star, BookOpen, Building2, MessageSquare, Award, ArrowUpRight, CheckCir
 import StarRating from './StarRating';
 
 export default function InstructorCard({ instructor, onEvaluate, onSelect }) {
+  const ratingValue = Number(instructor.rating !== undefined ? instructor.rating : (instructor.promedioGeneral || 5.0));
+  const methodologyValue = Number(instructor.methodology !== undefined ? instructor.methodology : (instructor.promedioMetodologia || 5.0));
+  const technicalValue = Number(instructor.technicalDomain !== undefined ? instructor.technicalDomain : (instructor.promedioTecnico || 5.0));
+  const evalsCount = instructor.ratingsCount !== undefined ? instructor.ratingsCount : (instructor.totalEvaluaciones || 0);
+
+  const instructorName = instructor.name || instructor.nombre || 'Instructor SENA';
+  const instructorModule = instructor.module || instructor.especialidad || 'Formación Profesional';
+  const instructorCenter = instructor.center || instructor.centro || 'Centro SENA';
+  const instructorTags = instructor.tags || [];
+
   // Color classification based on rating
-  const getBadgeColor = (rating) => {
-    if (rating >= 4.7) return 'bg-emerald-50 text-emerald-700 border-emerald-200';
-    if (rating >= 4.0) return 'bg-blue-50 text-blue-700 border-blue-200';
+  const getBadgeColor = (r) => {
+    if (r >= 4.7) return 'bg-emerald-50 text-emerald-700 border-emerald-200';
+    if (r >= 4.0) return 'bg-blue-50 text-blue-700 border-blue-200';
     return 'bg-amber-50 text-amber-700 border-amber-200';
   };
 
@@ -20,7 +30,7 @@ export default function InstructorCard({ instructor, onEvaluate, onSelect }) {
               <div className="relative">
                 <img
                   src={instructor.avatar}
-                  alt={instructor.name}
+                  alt={instructorName}
                   className="w-16 h-16 rounded-2xl object-cover ring-2 ring-slate-100 group-hover:ring-[#39A900] transition-all duration-300 shadow-sm"
                 />
                 <span className="absolute -bottom-1 -right-1 bg-[#39A900] text-white p-0.5 rounded-full ring-2 ring-white">
@@ -28,15 +38,15 @@ export default function InstructorCard({ instructor, onEvaluate, onSelect }) {
                 </span>
               </div>
               <div>
-                <span className={`inline-block text-[11px] font-semibold px-2.5 py-0.5 rounded-full border mb-1 ${getBadgeColor(instructor.rating)}`}>
-                  {instructor.rating >= 4.7 ? 'Instructor Destacado' : 'Instructor Certificado'}
+                <span className={`inline-block text-[11px] font-semibold px-2.5 py-0.5 rounded-full border mb-1 ${getBadgeColor(ratingValue)}`}>
+                  {ratingValue >= 4.7 ? 'Instructor Destacado' : 'Instructor Certificado'}
                 </span>
                 <h3 className="font-bold text-slate-900 text-base group-hover:text-[#00324D] transition-colors leading-snug">
-                  {instructor.name}
+                  {instructorName}
                 </h3>
                 <p className="text-xs text-slate-500 flex items-center gap-1 mt-0.5">
                   <Building2 className="w-3 h-3 text-slate-400 shrink-0" />
-                  <span className="truncate max-w-[210px]">{instructor.center}</span>
+                  <span className="truncate max-w-[210px]">{instructorCenter}</span>
                 </p>
               </div>
             </div>
@@ -46,17 +56,17 @@ export default function InstructorCard({ instructor, onEvaluate, onSelect }) {
           <div className="mt-4 p-2.5 bg-slate-50 rounded-xl border border-slate-100">
             <div className="flex items-center gap-2 text-xs font-semibold text-[#00324D] mb-1">
               <BookOpen className="w-3.5 h-3.5 text-[#39A900] shrink-0" />
-              <span className="line-clamp-1">{instructor.module}</span>
+              <span className="line-clamp-1">{instructorModule}</span>
             </div>
             <div className="flex flex-wrap gap-1 mt-1.5">
-              {instructor.tags.slice(0, 3).map((tag, idx) => (
+              {instructorTags.slice(0, 3).map((tag, idx) => (
                 <span key={idx} className="text-[10px] bg-white text-slate-600 px-2 py-0.5 rounded-md border border-slate-200">
                   {tag}
                 </span>
               ))}
-              {instructor.tags.length > 3 && (
+              {instructorTags.length > 3 && (
                 <span className="text-[10px] bg-white text-slate-400 px-1.5 py-0.5 rounded-md border border-slate-200">
-                  +{instructor.tags.length - 3}
+                  +{instructorTags.length - 3}
                 </span>
               )}
             </div>
@@ -67,8 +77,8 @@ export default function InstructorCard({ instructor, onEvaluate, onSelect }) {
             <div>
               <span className="text-[11px] font-semibold text-amber-900 block">Calificación General</span>
               <div className="flex items-center gap-2 mt-0.5">
-                <StarRating value={instructor.rating} size="sm" />
-                <span className="text-base font-extrabold text-amber-950">{instructor.rating.toFixed(1)}</span>
+                <StarRating value={ratingValue} size="sm" />
+                <span className="text-base font-extrabold text-amber-950">{ratingValue.toFixed(1)}</span>
                 <span className="text-xs text-amber-700/80">/ 5.0</span>
               </div>
             </div>
@@ -76,7 +86,7 @@ export default function InstructorCard({ instructor, onEvaluate, onSelect }) {
               <span className="text-[11px] text-slate-500 font-medium block">Evaluaciones</span>
               <span className="inline-flex items-center gap-1 text-xs font-bold text-slate-700 bg-white px-2 py-0.5 rounded-lg border border-slate-200 shadow-2xs mt-0.5">
                 <MessageSquare className="w-3 h-3 text-[#39A900]" />
-                {instructor.ratingsCount}
+                {evalsCount}
               </span>
             </div>
           </div>
@@ -88,12 +98,12 @@ export default function InstructorCard({ instructor, onEvaluate, onSelect }) {
                 <span className="flex items-center gap-1">
                   <span className="w-2 h-2 rounded-full bg-[#39A900]"></span> Metodología
                 </span>
-                <span className="font-bold text-slate-800">{instructor.methodology.toFixed(1)}</span>
+                <span className="font-bold text-slate-800">{methodologyValue.toFixed(1)}</span>
               </div>
               <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden">
                 <div 
                   className="bg-gradient-to-r from-[#39A900] to-emerald-400 h-2 rounded-full transition-all duration-500"
-                  style={{ width: `${(instructor.methodology / 5) * 100}%` }}
+                  style={{ width: `${Math.min(100, (methodologyValue / 5) * 100)}%` }}
                 ></div>
               </div>
             </div>
@@ -103,12 +113,12 @@ export default function InstructorCard({ instructor, onEvaluate, onSelect }) {
                 <span className="flex items-center gap-1">
                   <span className="w-2 h-2 rounded-full bg-[#00324D]"></span> Dominio Técnico
                 </span>
-                <span className="font-bold text-slate-800">{instructor.technicalDomain.toFixed(1)}</span>
+                <span className="font-bold text-slate-800">{technicalValue.toFixed(1)}</span>
               </div>
               <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden">
                 <div 
                   className="bg-gradient-to-r from-[#00324D] to-cyan-700 h-2 rounded-full transition-all duration-500"
-                  style={{ width: `${(instructor.technicalDomain / 5) * 100}%` }}
+                  style={{ width: `${Math.min(100, (technicalValue / 5) * 100)}%` }}
                 ></div>
               </div>
             </div>
@@ -136,4 +146,3 @@ export default function InstructorCard({ instructor, onEvaluate, onSelect }) {
     </div>
   );
 }
-

@@ -25,37 +25,37 @@ const generateToken = (user) => {
  */
 class AuthController {
   /**
-   * Inicia sesión y genera token JWT
+   * Inicia sesión y genera token JWT con validación estricta de credenciales
    * POST /api/auth/login
    */
   login = asyncHandler(async (req, res) => {
     const { email, password, rol } = req.body;
 
-    if (!email) {
+    if (!email || !password) {
       return res.status(400).json({
         success: false,
-        message: 'Por favor proporciona el correo electrónico institucional',
+        message: 'El correo electrónico y la contraseña son obligatorios',
       });
     }
 
     // Buscar usuario en base de datos
-    const query = { email: email.toLowerCase() };
+    const query = { email: email.toLowerCase().trim() };
     if (rol) query.rol = rol;
 
-    let user = await User.findOne(query).select('+password');
+    const user = await User.findOne(query).select('+password');
 
     if (!user) {
       return res.status(401).json({
         success: false,
-        message: 'Credenciales inválidas o usuario no registrado con ese rol',
+        message: 'Usuario no encontrado o no tiene el rol seleccionado',
       });
     }
 
-    // Verificación de contraseña
-    if (password && user.password && user.password !== password) {
+    // Validación estricta de contraseña
+    if (!user.password || user.password !== password) {
       return res.status(401).json({
         success: false,
-        message: 'Contraseña incorrecta',
+        message: 'Contraseña incorrecta. Acceso denegado.',
       });
     }
 

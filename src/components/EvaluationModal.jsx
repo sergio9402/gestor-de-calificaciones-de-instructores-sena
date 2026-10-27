@@ -18,16 +18,18 @@ export default function EvaluationModal({
 
   useEffect(() => {
     if (selectedInstructor) {
-      setInstructorId(selectedInstructor.id.toString());
+      setInstructorId(String(selectedInstructor.id || selectedInstructor._id));
     } else if (instructors.length > 0 && !instructorId) {
-      setInstructorId(instructors[0].id.toString());
+      setInstructorId(String(instructors[0].id || instructors[0]._id));
     }
     setError('');
   }, [selectedInstructor, isOpen, instructors]);
 
   if (!isOpen) return null;
 
-  const currentInstructor = instructors.find(inst => inst.id.toString() === instructorId.toString());
+  const currentInstructor = instructors.find(
+    inst => String(inst.id || inst._id) === String(instructorId)
+  );
 
   const getScoreDescription = (val) => {
     switch (val) {
@@ -54,9 +56,9 @@ export default function EvaluationModal({
     setIsSubmitting(true);
     setTimeout(() => {
       onSubmitEvaluation({
-        instructorId: Number(instructorId),
-        methodology,
-        technicalDomain,
+        instructorId: instructorId,
+        methodology: Number(methodology),
+        technicalDomain: Number(technicalDomain),
         comment: comment.trim(),
         date: new Date().toISOString().split('T')[0]
       });
@@ -65,7 +67,7 @@ export default function EvaluationModal({
       setMethodology(5);
       setTechnicalDomain(5);
       onClose();
-    }, 400);
+    }, 300);
   };
 
   return (
@@ -124,8 +126,8 @@ export default function EvaluationModal({
             >
               <option value="" disabled>-- Elige un instructor --</option>
               {instructors.map((inst) => (
-                <option key={inst.id} value={inst.id}>
-                  {inst.name} - {inst.module}
+                <option key={inst.id || inst._id} value={String(inst.id || inst._id)}>
+                  {inst.name || inst.nombre} - {inst.module || inst.especialidad}
                 </option>
               ))}
             </select>
@@ -135,18 +137,18 @@ export default function EvaluationModal({
               <div className="mt-3 p-3 bg-slate-50 rounded-xl border border-slate-200/80 flex items-center gap-3">
                 <img
                   src={currentInstructor.avatar}
-                  alt={currentInstructor.name}
+                  alt={currentInstructor.name || currentInstructor.nombre}
                   className="w-12 h-12 rounded-xl object-cover ring-2 ring-white shadow-xs"
                 />
                 <div className="flex-1 min-w-0">
                   <h4 className="text-sm font-bold text-slate-900 truncate">
-                    {currentInstructor.name}
+                    {currentInstructor.name || currentInstructor.nombre}
                   </h4>
                   <p className="text-xs text-slate-500 truncate">
-                    {currentInstructor.module}
+                    {currentInstructor.module || currentInstructor.especialidad}
                   </p>
                   <p className="text-[11px] text-[#39A900] font-semibold">
-                    Promedio actual: {currentInstructor.rating.toFixed(1)} ★ ({currentInstructor.ratingsCount} evaluaciones)
+                    Promedio actual: {Number(currentInstructor.rating || currentInstructor.promedioGeneral || 5.0).toFixed(1)} ★ ({currentInstructor.ratingsCount || currentInstructor.totalEvaluaciones || 0} evaluaciones)
                   </p>
                 </div>
               </div>
@@ -270,4 +272,3 @@ export default function EvaluationModal({
     </div>
   );
 }
-

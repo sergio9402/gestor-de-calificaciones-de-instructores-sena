@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Users, 
   Clock, 
@@ -18,15 +18,39 @@ import {
 import StarRating from './StarRating';
 import { mockFichas } from '../data/mockFichas';
 
-export default function InstructorDashboard({ user, instructors }) {
-  // Find current instructor details from dynamic state
-  const currentInstructorData = instructors.find(i => i.id === user.id) || user;
-  const myFichas = mockFichas.filter(f => f.instructorId === user.id);
+export default function InstructorDashboard({ user, instructors, onUpdateStatus }) {
+  // Encontrar datos actualizados en tiempo real desde el estado global
+  const currentInstructorData = instructors.find(
+    i => String(i.id || i._id) === String(user.id || user._id)
+  ) || user;
+
+  const myFichas = mockFichas.filter(
+    f => String(f.instructorId) === String(user.id || user._id)
+  );
 
   const [activeTab, setActiveTab] = useState('fichas'); // 'fichas' | 'evaluaciones'
-  const [operationalStatus, setOperationalStatus] = useState(user.operationalStatus || 'En Formación');
+  const [operationalStatus, setOperationalStatus] = useState(
+    currentInstructorData.operationalStatus || currentInstructorData.estado || 'En Formación'
+  );
 
-  // Status colors
+  // Sincronizar estado local si cambia externamente
+  useEffect(() => {
+    const status = currentInstructorData.operationalStatus || currentInstructorData.estado;
+    if (status) {
+      setOperationalStatus(status);
+    }
+  }, [currentInstructorData]);
+
+  // Manejador del cambio de estado operativo (sincroniza con Coordinación)
+  const handleStatusChange = (e) => {
+    const newStatus = e.target.value;
+    setOperationalStatus(newStatus);
+    if (onUpdateStatus) {
+      onUpdateStatus(user.id || user._id, newStatus);
+    }
+  };
+
+  // Colores según estado operativo
   const getStatusColor = (status) => {
     switch (status) {
       case 'En Formación':
@@ -42,6 +66,13 @@ export default function InstructorDashboard({ user, instructors }) {
     }
   };
 
+  // Métricas calculadas en vivo
+  const liveRating = Number(currentInstructorData.rating || currentInstructorData.promedioGeneral || 5.0).toFixed(1);
+  const liveMethodology = Number(currentInstructorData.methodology || currentInstructorData.promedioMetodologia || 5.0).toFixed(1);
+  const liveTechnical = Number(currentInstructorData.technicalDomain || currentInstructorData.promedioTecnico || 5.0).toFixed(1);
+  const liveCount = currentInstructorData.ratingsCount || currentInstructorData.totalEvaluaciones || 0;
+  const liveEvaluations = currentInstructorData.evaluations || [];
+
   return (
     <div className="space-y-8 animate-in fade-in duration-300">
       
@@ -55,8 +86,8 @@ export default function InstructorDashboard({ user, instructors }) {
           <div className="flex flex-col sm:flex-row items-start sm:items-center gap-5">
             <div className="relative">
               <img
-                src={user.avatar}
-                alt={user.name}
+                src={currentInstructorData.avatar || user.avatar}
+                alt={currentInstructorData.name || user.name}
                 className="w-20 h-20 sm:w-24 sm:h-24 rounded-2xl object-cover ring-4 ring-[#39A900]/20 shadow-md"
               />
               <span className="absolute -bottom-1 -right-1 bg-[#39A900] text-white p-1 rounded-full ring-2 ring-white">
@@ -75,55 +106,58 @@ export default function InstructorDashboard({ user, instructors }) {
               </div>
 
               <h1 className="text-2xl sm:text-3xl font-extrabold text-[#00324D]">
-                {user.name}
+                {currentInstructorData.name || user.name}
               </h1>
               <p className="text-xs sm:text-sm text-slate-500 font-medium mt-0.5">
-                {user.module}
+                {currentInstructorData.module || currentInstructorData.especialidad || user.module}
               </p>
               <div className="flex flex-wrap items-center gap-4 text-xs text-slate-500 mt-2">
                 <span className="flex items-center gap-1">
                   <MapPin className="w-3.5 h-3.5 text-slate-400" />
-                  {user.center}
+                  {currentInstructorData.center || user.center}
                 </span>
                 <span className="flex items-center gap-1">
                   <Clock className="w-3.5 h-3.5 text-slate-400" />
-                  {user.schedule || '07:00 AM - 01:00 PM'}
+                  {currentInstructorData.horario || user.schedule || '07:00 AM - 01:00 PM'}
                 </span>
               </div>
             </div>
           </div>
 
-          {/* Operational Status Switcher */}
-          <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 self-stretch sm:self-auto min-w-[240px]">
-            <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block mb-2">
-              Cambiar Estado Operativo Actual
-            </span>
+          {/* Operational Status Switcher (Sincronizado en Vivo) */}
+          <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 self-stretch sm:self-auto min-w-[260px]">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-[11px] font-bold text-slate-600 uppercase tracking-wider block">
+                Mi Estado Operativo Actual
+              </span>
+              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+            </div>
             <select
               value={operationalStatus}
-              onChange={(e) => setOperationalStatus(e.target.value)}
-              className="w-full text-xs font-bold bg-white border border-slate-200 rounded-xl px-3 py-2 text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#39A900] cursor-pointer shadow-2xs"
+              onChange={handleStatusChange}
+              className="w-full text-xs font-bold bg-white border border-slate-200 rounded-xl px-3 py-2.5 text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#39A900] cursor-pointer shadow-xs"
             >
               <option value="En Formación">🟢 En Formación (En Aula)</option>
               <option value="Asesoría Técnica">🔵 En Asesoría Técnica</option>
               <option value="Disponible">⚪ Disponible en Sede</option>
               <option value="En Reunión">🟣 En Reunión Pedagógica</option>
             </select>
-            <p className="text-[10px] text-slate-400 mt-1.5 flex items-center gap-1">
+            <p className="text-[10px] text-slate-500 mt-1.5 flex items-center gap-1 font-medium">
               <Activity className="w-3 h-3 text-[#39A900]" />
-              Visible en tiempo real para Coordinación Académica.
+              Sincronizado en tiempo real con Coordinación.
             </p>
           </div>
 
         </div>
 
-        {/* Competencies Ribbon */}
+        {/* Competencies Ribbon Actualizado en Vivo */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mt-8 pt-6 border-t border-slate-100">
           <div className="p-3 bg-amber-50/70 rounded-2xl border border-amber-100">
             <span className="text-[11px] font-bold text-amber-900 block">Calificación General</span>
             <div className="flex items-center gap-1.5 mt-1">
               <Star className="w-5 h-5 fill-amber-400 text-amber-400" />
               <span className="text-2xl font-black text-amber-950">
-                {currentInstructorData.rating?.toFixed(1) || '4.8'}
+                {liveRating}
               </span>
               <span className="text-xs text-amber-800">/ 5.0</span>
             </div>
@@ -134,7 +168,7 @@ export default function InstructorDashboard({ user, instructors }) {
             <div className="flex items-center gap-1.5 mt-1">
               <span className="w-2.5 h-2.5 rounded-full bg-[#39A900]"></span>
               <span className="text-2xl font-black text-emerald-950">
-                {currentInstructorData.methodology?.toFixed(1) || '4.7'}
+                {liveMethodology}
               </span>
               <span className="text-xs text-emerald-800">/ 5.0</span>
             </div>
@@ -145,7 +179,7 @@ export default function InstructorDashboard({ user, instructors }) {
             <div className="flex items-center gap-1.5 mt-1">
               <span className="w-2.5 h-2.5 rounded-full bg-[#00324D]"></span>
               <span className="text-2xl font-black text-sky-950">
-                {currentInstructorData.technicalDomain?.toFixed(1) || '4.9'}
+                {liveTechnical}
               </span>
               <span className="text-xs text-sky-800">/ 5.0</span>
             </div>
@@ -156,9 +190,9 @@ export default function InstructorDashboard({ user, instructors }) {
             <div className="flex items-center gap-1.5 mt-1">
               <MessageSquare className="w-5 h-5 text-[#39A900]" />
               <span className="text-2xl font-black text-slate-800">
-                {currentInstructorData.ratingsCount || 42}
+                {liveCount}
               </span>
-              <span className="text-xs text-slate-500">aprendices</span>
+              <span className="text-xs text-slate-500 font-medium">aprendices</span>
             </div>
           </div>
         </div>
@@ -188,7 +222,7 @@ export default function InstructorDashboard({ user, instructors }) {
           }`}
         >
           <MessageSquare className="w-4 h-4" />
-          <span>Opiniones & Retroalimentación Anónima</span>
+          <span>Opiniones & Retroalimentación Anónima ({liveEvaluations.length})</span>
         </button>
       </div>
 
@@ -298,7 +332,7 @@ export default function InstructorDashboard({ user, instructors }) {
           <div className="flex items-center justify-between">
             <div>
               <h2 className="text-lg font-bold text-[#00324D]">
-                Comentarios Constructivos de los Aprendices
+                Comentarios Constructivos de los Aprendices ({liveEvaluations.length})
               </h2>
               <p className="text-xs text-slate-500">
                 Retroalimentación 100% anónima para el fortalecimiento de tus prácticas pedagógicas.
@@ -311,10 +345,10 @@ export default function InstructorDashboard({ user, instructors }) {
           </div>
 
           <div className="space-y-4">
-            {currentInstructorData.evaluations && currentInstructorData.evaluations.length > 0 ? (
-              currentInstructorData.evaluations.map((item) => (
+            {liveEvaluations.length > 0 ? (
+              liveEvaluations.map((item) => (
                 <div
-                  key={item.id}
+                  key={item.id || item._id}
                   className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm space-y-3"
                 >
                   <div className="flex items-center justify-between">
@@ -324,28 +358,30 @@ export default function InstructorDashboard({ user, instructors }) {
                       </div>
                       <div>
                         <span className="text-xs font-bold text-slate-800">Aprendiz de Ficha</span>
-                        <span className="text-[10px] text-slate-400 block">{item.date}</span>
+                        <span className="text-[10px] text-slate-400 block">
+                          {item.date || (item.fecha ? new Date(item.fecha).toISOString().split('T')[0] : 'Reciente')}
+                        </span>
                       </div>
                     </div>
 
                     <div className="flex items-center gap-2">
                       <span className="text-xs font-bold text-amber-900 bg-amber-50 px-2 py-0.5 rounded-md border border-amber-200">
-                        ★ {item.rating || ((item.methodology + item.technicalDomain) / 2).toFixed(1)} / 5.0
+                        ★ {item.rating ? Number(item.rating).toFixed(1) : Number((item.methodology + item.technicalDomain) / 2).toFixed(1)} / 5.0
                       </span>
                     </div>
                   </div>
 
                   <div className="flex items-center gap-2">
                     <span className="text-[11px] bg-slate-50 border border-slate-200 px-2.5 py-0.5 rounded-md font-semibold text-slate-700">
-                      Metodología: <strong className="text-[#39A900]">{item.methodology}/5</strong>
+                      Metodología: <strong className="text-[#39A900]">{item.methodology || item.calificacionMetodologia}/5</strong>
                     </span>
                     <span className="text-[11px] bg-slate-50 border border-slate-200 px-2.5 py-0.5 rounded-md font-semibold text-slate-700">
-                      Dominio Técnico: <strong className="text-[#00324D]">{item.technicalDomain}/5</strong>
+                      Dominio Técnico: <strong className="text-[#00324D]">{item.technicalDomain || item.calificacionTecnica}/5</strong>
                     </span>
                   </div>
 
                   <p className="text-xs sm:text-sm text-slate-700 italic bg-slate-50/70 p-3.5 rounded-xl border border-slate-100">
-                    "{item.comment}"
+                    "{item.comment || item.comentario}"
                   </p>
                 </div>
               ))
@@ -362,4 +398,3 @@ export default function InstructorDashboard({ user, instructors }) {
     </div>
   );
 }
-

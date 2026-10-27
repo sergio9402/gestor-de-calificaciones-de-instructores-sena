@@ -31,14 +31,23 @@ export default function CoordinatorDashboard({
   const [statusFilter, setStatusFilter] = useState('ALL');
   const [searchTerm, setSearchTerm] = useState('');
 
-  // Counters
+  // Counters calculados en vivo sobre el estado reactivo global
   const totalInstructors = instructors.length;
-  const inClassCount = instructors.filter(i => i.operationalStatus === 'En Formación').length;
-  const inAdvisoryCount = instructors.filter(i => i.operationalStatus === 'En Asesoría').length;
-  const availableCount = instructors.filter(i => i.operationalStatus === 'Disponible').length;
-  const avgOverall = (instructors.reduce((acc, curr) => acc + curr.rating, 0) / instructors.length).toFixed(2);
+  const inClassCount = instructors.filter(
+    i => (i.operationalStatus || i.estado) === 'En Formación'
+  ).length;
+  const inAdvisoryCount = instructors.filter(
+    i => (i.operationalStatus || i.estado) === 'En Asesoría' || (i.operationalStatus || i.estado) === 'Asesoría Técnica'
+  ).length;
+  const availableCount = instructors.filter(
+    i => (i.operationalStatus || i.estado) === 'Disponible'
+  ).length;
 
-  // Status badge helper
+  const avgOverall = instructors.length > 0
+    ? (instructors.reduce((acc, curr) => acc + Number(curr.rating || curr.promedioGeneral || 5.0), 0) / instructors.length).toFixed(2)
+    : '5.00';
+
+  // Status badge helper con soporte para ambos campos
   const getStatusBadge = (status) => {
     switch (status) {
       case 'En Formación':
@@ -49,6 +58,7 @@ export default function CoordinatorDashboard({
           </span>
         );
       case 'En Asesoría':
+      case 'Asesoría Técnica':
         return (
           <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-blue-50 text-blue-700 border border-blue-200">
             <span className="w-2 h-2 rounded-full bg-blue-500"></span>
@@ -78,17 +88,25 @@ export default function CoordinatorDashboard({
     }
   };
 
-  // Filtered list
+  // Filtered list reactiva
   const filteredInstructors = instructors.filter(i => {
+    const currentStatus = i.operationalStatus || i.estado || 'Disponible';
+    const instructorName = i.name || i.nombre || '';
+    const instructorModule = i.module || i.especialidad || '';
+    const instructorRoom = i.currentRoom || i.centro || '';
+
     const matchesSearch = 
-      i.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      i.module.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      i.currentRoom?.toLowerCase().includes(searchTerm.toLowerCase());
+      instructorName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      instructorModule.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      instructorRoom.toLowerCase().includes(searchTerm.toLowerCase());
 
     if (!matchesSearch) return false;
 
     if (statusFilter === 'ALL') return true;
-    return i.operationalStatus === statusFilter;
+    if (statusFilter === 'En Asesoría') {
+      return currentStatus === 'En Asesoría' || currentStatus === 'Asesoría Técnica';
+    }
+    return currentStatus === statusFilter;
   });
 
   return (
@@ -110,7 +128,7 @@ export default function CoordinatorDashboard({
         </div>
       </div>
 
-      {/* KPI Ribbon */}
+      {/* KPI Ribbon Reactivo */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex items-center justify-between">
           <div>
@@ -280,86 +298,92 @@ export default function CoordinatorDashboard({
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 text-xs">
-                {filteredInstructors.map((inst) => (
-                  <tr key={inst.id} className="hover:bg-slate-50/80 transition-colors">
-                    
-                    {/* Instructor Info */}
-                    <td className="py-4 px-4">
-                      <div className="flex items-center gap-3">
-                        <img
-                          src={inst.avatar}
-                          alt={inst.name}
-                          className="w-10 h-10 rounded-xl object-cover ring-2 ring-slate-100"
-                        />
-                        <div>
-                          <span className="font-bold text-slate-900 block text-sm">
-                            {inst.name}
-                          </span>
-                          <span className="text-slate-500 text-[11px] block line-clamp-1 max-w-[220px]">
-                            {inst.module}
+                {filteredInstructors.map((inst) => {
+                  const ratingValue = Number(inst.rating || inst.promedioGeneral || 5.0);
+                  const evalsCount = inst.ratingsCount || inst.totalEvaluaciones || 0;
+                  const currentStatus = inst.operationalStatus || inst.estado || 'Disponible';
+
+                  return (
+                    <tr key={inst.id || inst._id} className="hover:bg-slate-50/80 transition-colors">
+                      
+                      {/* Instructor Info */}
+                      <td className="py-4 px-4">
+                        <div className="flex items-center gap-3">
+                          <img
+                            src={inst.avatar}
+                            alt={inst.name || inst.nombre}
+                            className="w-10 h-10 rounded-xl object-cover ring-2 ring-slate-100"
+                          />
+                          <div>
+                            <span className="font-bold text-slate-900 block text-sm">
+                              {inst.name || inst.nombre}
+                            </span>
+                            <span className="text-slate-500 text-[11px] block line-clamp-1 max-w-[220px]">
+                              {inst.module || inst.especialidad}
+                            </span>
+                          </div>
+                        </div>
+                      </td>
+
+                      {/* Operational Status con cambio en vivo */}
+                      <td className="py-4 px-4 whitespace-nowrap">
+                        {getStatusBadge(currentStatus)}
+                      </td>
+
+                      {/* Current Room */}
+                      <td className="py-4 px-4 whitespace-nowrap">
+                        <span className="font-semibold text-slate-700 flex items-center gap-1.5">
+                          <MapPin className="w-3.5 h-3.5 text-slate-400" />
+                          {inst.currentRoom || inst.centro || 'Sede Principal'}
+                        </span>
+                      </td>
+
+                      {/* Fichas */}
+                      <td className="py-4 px-4 whitespace-nowrap">
+                        <div className="flex flex-wrap gap-1">
+                          {inst.assignedFichas && inst.assignedFichas.length > 0 ? (
+                            inst.assignedFichas.map(f => (
+                              <span key={f} className="bg-slate-100 text-slate-700 px-2 py-0.5 rounded text-[11px] font-bold border border-slate-200">
+                                {f}
+                              </span>
+                            ))
+                          ) : (
+                            <span className="text-slate-400 italic">Sin ficha</span>
+                          )}
+                        </div>
+                      </td>
+
+                      {/* Rating recalculado en vivo */}
+                      <td className="py-4 px-4 whitespace-nowrap">
+                        <div className="flex items-center gap-1.5">
+                          <StarRating value={ratingValue} size="sm" />
+                          <span className="font-extrabold text-slate-900 ml-1">
+                            {ratingValue.toFixed(1)}
                           </span>
                         </div>
-                      </div>
-                    </td>
+                      </td>
 
-                    {/* Operational Status */}
-                    <td className="py-4 px-4 whitespace-nowrap">
-                      {getStatusBadge(inst.operationalStatus)}
-                    </td>
-
-                    {/* Current Room */}
-                    <td className="py-4 px-4 whitespace-nowrap">
-                      <span className="font-semibold text-slate-700 flex items-center gap-1.5">
-                        <MapPin className="w-3.5 h-3.5 text-slate-400" />
-                        {inst.currentRoom || 'Sede Principal'}
-                      </span>
-                    </td>
-
-                    {/* Fichas */}
-                    <td className="py-4 px-4 whitespace-nowrap">
-                      <div className="flex flex-wrap gap-1">
-                        {inst.assignedFichas && inst.assignedFichas.length > 0 ? (
-                          inst.assignedFichas.map(f => (
-                            <span key={f} className="bg-slate-100 text-slate-700 px-2 py-0.5 rounded text-[11px] font-bold border border-slate-200">
-                              {f}
-                            </span>
-                          ))
-                        ) : (
-                          <span className="text-slate-400 italic">Sin ficha</span>
-                        )}
-                      </div>
-                    </td>
-
-                    {/* Rating */}
-                    <td className="py-4 px-4 whitespace-nowrap">
-                      <div className="flex items-center gap-1.5">
-                        <StarRating value={inst.rating} size="sm" />
-                        <span className="font-extrabold text-slate-900 ml-1">
-                          {inst.rating.toFixed(1)}
+                      {/* Evaluations count en vivo */}
+                      <td className="py-4 px-4 whitespace-nowrap">
+                        <span className="font-semibold text-slate-700 bg-slate-100 px-2.5 py-1 rounded-lg">
+                          {evalsCount} votos
                         </span>
-                      </div>
-                    </td>
+                      </td>
 
-                    {/* Evaluations */}
-                    <td className="py-4 px-4 whitespace-nowrap">
-                      <span className="font-semibold text-slate-700 bg-slate-100 px-2.5 py-1 rounded-lg">
-                        {inst.ratingsCount} votos
-                      </span>
-                    </td>
+                      {/* Actions */}
+                      <td className="py-4 px-4 text-right whitespace-nowrap">
+                        <button
+                          onClick={() => onSelectInstructor(inst)}
+                          className="text-xs font-bold text-[#00324D] hover:text-[#39A900] bg-slate-100 hover:bg-slate-200 px-3 py-1.5 rounded-lg transition-colors inline-flex items-center gap-1"
+                        >
+                          <span>Auditar</span>
+                          <ArrowUpRight className="w-3.5 h-3.5" />
+                        </button>
+                      </td>
 
-                    {/* Actions */}
-                    <td className="py-4 px-4 text-right whitespace-nowrap">
-                      <button
-                        onClick={() => onSelectInstructor(inst)}
-                        className="text-xs font-bold text-[#00324D] hover:text-[#39A900] bg-slate-100 hover:bg-slate-200 px-3 py-1.5 rounded-lg transition-colors inline-flex items-center gap-1"
-                      >
-                        <span>Auditar</span>
-                        <ArrowUpRight className="w-3.5 h-3.5" />
-                      </button>
-                    </td>
-
-                  </tr>
-                ))}
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -380,7 +404,7 @@ export default function CoordinatorDashboard({
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {instructors.map((instructor) => (
             <InstructorCard
-              key={instructor.id}
+              key={instructor.id || instructor._id}
               instructor={instructor}
               onEvaluate={onEvaluateInstructor}
               onSelect={onSelectInstructor}
@@ -392,4 +416,3 @@ export default function CoordinatorDashboard({
     </div>
   );
 }
-

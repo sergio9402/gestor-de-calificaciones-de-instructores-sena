@@ -25,29 +25,29 @@ import {
 } from 'lucide-react';
 
 export default function App() {
-  // Authentication State (default to instructor or login screen)
+  // Estado de usuario autenticado
   const [currentUser, setCurrentUser] = useState(mockUsers.instructor);
 
-  // Instructors dynamic state
+  // Estado dinámico global de instructores
   const [instructors, setInstructors] = useState(initialInstructors);
   
-  // Navigation for Aprendiz view
+  // Navegación para vista Aprendiz
   const [aprendizActiveTab, setAprendizActiveTab] = useState('dashboard'); // 'dashboard' | 'metrics'
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('ALL');
   const [sortBy, setSortBy] = useState('rating-desc');
 
-  // Modals state
+  // Modales
   const [isEvalModalOpen, setIsEvalModalOpen] = useState(false);
   const [evalTargetInstructor, setEvalTargetInstructor] = useState(null);
   
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
   const [detailInstructor, setDetailInstructor] = useState(null);
 
-  // Notification state
+  // Notificaciones Toast
   const [toast, setToast] = useState(null);
 
-  // Categories list for Aprendiz view
+  // Categorías de formación
   const categories = [
     { id: 'ALL', label: 'Todos los Programas' },
     { id: 'ADSO', label: 'ADSO & Backend' },
@@ -57,42 +57,55 @@ export default function App() {
     { id: 'IA', label: 'IA & Analítica' },
   ];
 
-  // Filter & Search Logic for Aprendiz view
+  // Filtro y búsqueda para vista pública
   const filteredInstructors = useMemo(() => {
     return instructors
       .filter((inst) => {
+        const name = (inst.name || inst.nombre || '').toLowerCase();
+        const mod = (inst.module || inst.especialidad || '').toLowerCase();
+        const center = (inst.center || inst.centro || '').toLowerCase();
+        const tags = (inst.tags || []).map(t => t.toLowerCase());
+
+        const query = searchTerm.toLowerCase();
         const matchesSearch = 
-          inst.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          inst.module.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          inst.center.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          inst.tags.some(t => t.toLowerCase().includes(searchTerm.toLowerCase()));
+          name.includes(query) ||
+          mod.includes(query) ||
+          center.includes(query) ||
+          tags.some(t => t.includes(query));
 
         if (!matchesSearch) return false;
 
         if (selectedCategory === 'ALL') return true;
-        if (selectedCategory === 'ADSO') return inst.module.includes('ADSO') || inst.tags.includes('ADSO');
-        if (selectedCategory === 'Frontend') return inst.module.includes('Frontend') || inst.tags.includes('Frontend');
-        if (selectedCategory === 'Bases de Datos') return inst.module.includes('Bases de Datos') || inst.tags.includes('SQL');
-        if (selectedCategory === 'Ciberseguridad') return inst.module.includes('Seguridad') || inst.tags.includes('AWS');
-        if (selectedCategory === 'IA') return inst.module.includes('Inteligencia') || inst.tags.includes('Python');
+        if (selectedCategory === 'ADSO') return mod.includes('adso') || tags.includes('adso');
+        if (selectedCategory === 'Frontend') return mod.includes('frontend') || tags.includes('frontend');
+        if (selectedCategory === 'Bases de Datos') return mod.includes('bases de datos') || tags.includes('sql');
+        if (selectedCategory === 'Ciberseguridad') return mod.includes('seguridad') || tags.includes('aws');
+        if (selectedCategory === 'IA') return mod.includes('inteligencia') || tags.includes('python');
 
         return true;
       })
       .sort((a, b) => {
-        if (sortBy === 'rating-desc') return b.rating - a.rating;
-        if (sortBy === 'rating-asc') return a.rating - b.rating;
-        if (sortBy === 'evals-desc') return b.ratingsCount - a.ratingsCount;
-        if (sortBy === 'name') return a.name.localeCompare(b.name);
+        const aRating = Number(a.rating !== undefined ? a.rating : (a.promedioGeneral || 0));
+        const bRating = Number(b.rating !== undefined ? b.rating : (b.promedioGeneral || 0));
+        const aCount = a.ratingsCount || a.totalEvaluaciones || 0;
+        const bCount = b.ratingsCount || b.totalEvaluaciones || 0;
+        const aName = a.name || a.nombre || '';
+        const bName = b.name || b.nombre || '';
+
+        if (sortBy === 'rating-desc') return bRating - aRating;
+        if (sortBy === 'rating-asc') return aRating - bRating;
+        if (sortBy === 'evals-desc') return bCount - aCount;
+        if (sortBy === 'name') return aName.localeCompare(bName);
         return 0;
       });
   }, [instructors, searchTerm, selectedCategory, sortBy]);
 
-  // Auth Handlers
+  // Manejo de Inicio y Cierre de Sesión
   const handleLogin = (user) => {
     setCurrentUser(user);
     setToast({
       title: '¡Sesión Iniciada con Éxito!',
-      message: `Bienvenido(a) al portal SENA como ${user.name} (${user.role.toUpperCase()}).`
+      message: `Bienvenido(a) al portal SENA como ${user.name || user.nombre} (${(user.role || user.rol || '').toUpperCase()}).`
     });
   };
 
@@ -104,58 +117,135 @@ export default function App() {
     });
   };
 
-  // Handle open evaluation
+  // Abrir modal de evaluación
   const handleOpenEvaluate = (instructor = null) => {
     setEvalTargetInstructor(instructor);
     setIsEvalModalOpen(true);
   };
 
-  // Handle open details
+  // Abrir modal de detalle
   const handleOpenDetails = (instructor) => {
     setDetailInstructor(instructor);
     setIsDetailModalOpen(true);
   };
 
-  // Submit anonymous evaluation & update live state
+  // Instructor en detalle sincronizado en tiempo real
+  const activeDetailInstructor = useMemo(() => {
+    if (!detailInstructor) return null;
+    const targetKey = String(detailInstructor.id || detailInstructor._id);
+    return (
+      instructors.find((i) => String(i.id || i._id) === targetKey) || detailInstructor
+    );
+  }, [instructors, detailInstructor]);
+
+  // Sincronización en tiempo real del Estado Operativo del Instructor
+  const handleUpdateInstructorStatus = (instructorId, newStatus) => {
+    const targetIdStr = String(instructorId);
+
+    setInstructors((prev) =>
+      prev.map((inst) => {
+        if (String(inst.id || inst._id) === targetIdStr) {
+          return {
+            ...inst,
+            operationalStatus: newStatus,
+            estado: newStatus
+          };
+        }
+        return inst;
+      })
+    );
+
+    // Actualizar también al usuario actual si es ese instructor
+    setCurrentUser((prev) => {
+      if (prev && String(prev.id || prev._id) === targetIdStr) {
+        return {
+          ...prev,
+          operationalStatus: newStatus,
+          estado: newStatus
+        };
+      }
+      return prev;
+    });
+
+    setToast({
+      title: '¡Estado Sincronizado en Vivo!',
+      message: `El estado se actualizó a "${newStatus}" y ahora es visible en tiempo real para Coordinación.`
+    });
+  };
+
+  // Envío y recálculo instantáneo de la evaluación del aprendiz
   const handleSubmitEvaluation = ({ instructorId, methodology, technicalDomain, comment, date }) => {
+    const targetIdStr = String(instructorId);
+    const numMethodology = Number(methodology);
+    const numTechnical = Number(technicalDomain);
+
     setInstructors((prev) => {
       return prev.map((inst) => {
-        if (inst.id === instructorId) {
-          const newRatingsCount = inst.ratingsCount + 1;
-          const newMethodology = Number(((inst.methodology * inst.ratingsCount + methodology) / newRatingsCount).toFixed(2));
-          const newTechnicalDomain = Number(((inst.technicalDomain * inst.ratingsCount + technicalDomain) / newRatingsCount).toFixed(2));
-          const overallNewScore = Number(((newMethodology + newTechnicalDomain) / 2).toFixed(2));
+        // Comparación segura como strings
+        if (String(inst.id || inst._id) === targetIdStr) {
+          const prevCount = Number(inst.ratingsCount !== undefined ? inst.ratingsCount : (inst.totalEvaluaciones || 0));
+          const newRatingsCount = prevCount + 1;
+
+          const prevMethodology = Number(inst.methodology !== undefined ? inst.methodology : (inst.promedioMetodologia || 5.0));
+          const prevTechnical = Number(inst.technicalDomain !== undefined ? inst.technicalDomain : (inst.promedioTecnico || 5.0));
+
+          const newMethodology = Number(
+            ((prevMethodology * prevCount + numMethodology) / newRatingsCount).toFixed(2)
+          );
+          const newTechnicalDomain = Number(
+            ((prevTechnical * prevCount + numTechnical) / newRatingsCount).toFixed(2)
+          );
+          const overallNewScore = Number(
+            ((newMethodology + newTechnicalDomain) / 2).toFixed(2)
+          );
 
           const newEvalObj = {
             id: `eval-${Date.now()}`,
             date,
-            methodology,
-            technicalDomain,
-            rating: Number(((methodology + technicalDomain) / 2).toFixed(1)),
+            methodology: numMethodology,
+            technicalDomain: numTechnical,
+            rating: Number(((numMethodology + numTechnical) / 2).toFixed(1)),
             comment
           };
 
-          return {
+          const updatedInst = {
             ...inst,
             rating: overallNewScore,
+            promedioGeneral: overallNewScore,
             ratingsCount: newRatingsCount,
+            totalEvaluaciones: newRatingsCount,
             methodology: newMethodology,
+            promedioMetodologia: newMethodology,
             technicalDomain: newTechnicalDomain,
+            promedioTecnico: newTechnicalDomain,
             evaluations: [newEvalObj, ...(inst.evaluations || [])]
           };
+
+          return updatedInst;
         }
         return inst;
       });
     });
 
-    const target = instructors.find(i => i.id === instructorId);
+    // Si el usuario actualmente en sesión es ese instructor, actualizar su vista
+    setCurrentUser((prev) => {
+      if (prev && String(prev.id || prev._id) === targetIdStr) {
+        return {
+          ...prev,
+          ratingsCount: (prev.ratingsCount || 0) + 1
+        };
+      }
+      return prev;
+    });
+
+    const target = instructors.find(i => String(i.id || i._id) === targetIdStr);
     setToast({
-      title: '¡Evaluación Registrada con Éxito!',
-      message: `Tu evaluación anónima para ${target ? target.name : 'el instructor'} ha sido agregada y calculada en el sistema.`
+      title: '¡Calificación Recalculada en Vivo!',
+      message: `Se ha registrado tu evaluación para ${target ? (target.name || target.nombre) : 'el instructor'}. Promedio actualizado.`
     });
   };
 
-  // If user is not authenticated, render Login View
+  // Si no está autenticado, renderizar Login
   if (!currentUser) {
     return (
       <>
@@ -165,10 +255,12 @@ export default function App() {
     );
   }
 
+  const currentRole = currentUser.role || currentUser.rol;
+
   return (
     <div className="min-h-screen flex flex-col bg-slate-50 selection:bg-[#39A900] selection:text-white">
       
-      {/* Dynamic Institutional Header based on Role */}
+      {/* Header Institucional */}
       <Header
         currentUser={currentUser}
         onLogout={handleLogout}
@@ -177,19 +269,20 @@ export default function App() {
         onOpenEvaluate={() => handleOpenEvaluate()}
       />
 
-      {/* Main Container - Conditional Rendering per Role */}
+      {/* Contenedor Principal */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8">
         
         {/* ROL 1: INSTRUCTOR */}
-        {currentUser.role === 'instructor' && (
+        {currentRole === 'instructor' && (
           <InstructorDashboard
             user={currentUser}
             instructors={instructors}
+            onUpdateStatus={handleUpdateInstructorStatus}
           />
         )}
 
         {/* ROL 2: COORDINADOR */}
-        {currentUser.role === 'coordinator' && (
+        {currentRole === 'coordinator' && (
           <CoordinatorDashboard
             user={currentUser}
             instructors={instructors}
@@ -199,10 +292,10 @@ export default function App() {
         )}
 
         {/* ROL 3: APRENDIZ / VISTA PÚBLICA */}
-        {currentUser.role === 'aprendiz' && (
+        {currentRole === 'aprendiz' && (
           <div className="space-y-8 animate-in fade-in duration-300">
             
-            {/* View Switcher for Apprentice */}
+            {/* Selector de Vistas de Aprendiz */}
             <div className="flex items-center justify-between border-b border-slate-200 pb-3">
               <div className="flex items-center gap-2">
                 <button
@@ -241,7 +334,7 @@ export default function App() {
             {aprendizActiveTab === 'dashboard' ? (
               <div className="space-y-6">
                 
-                {/* Search and Filters */}
+                {/* Buscador y Filtros */}
                 <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-4">
                   <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                     <div className="relative flex-1">
@@ -278,7 +371,7 @@ export default function App() {
                     </div>
                   </div>
 
-                  {/* Category Filter Chips */}
+                  {/* Chips de Categorías */}
                   <div className="flex items-center gap-2 overflow-x-auto pb-1 pt-1 no-scrollbar">
                     {categories.map((cat) => (
                       <button
@@ -296,11 +389,11 @@ export default function App() {
                   </div>
                 </div>
 
-                {/* Instructors Grid */}
+                {/* Grid de Instructores */}
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                   {filteredInstructors.map((instructor) => (
                     <InstructorCard
-                      key={instructor.id}
+                      key={instructor.id || instructor._id}
                       instructor={instructor}
                       onEvaluate={handleOpenEvaluate}
                       onSelect={handleOpenDetails}
@@ -320,7 +413,7 @@ export default function App() {
 
       </main>
 
-      {/* Institutional Footer */}
+      {/* Footer */}
       <footer className="bg-white border-t border-slate-200 mt-16 py-8">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex flex-col md:flex-row items-center justify-between gap-4 text-center md:text-left">
@@ -346,7 +439,7 @@ export default function App() {
         </div>
       </footer>
 
-      {/* Evaluation Modal */}
+      {/* Modal de Evaluación */}
       <EvaluationModal
         isOpen={isEvalModalOpen}
         onClose={() => setIsEvalModalOpen(false)}
@@ -355,11 +448,11 @@ export default function App() {
         onSubmitEvaluation={handleSubmitEvaluation}
       />
 
-      {/* Instructor Detail / Reviews Modal */}
+      {/* Modal de Detalle / Reseñas (Sincronizado en Vivo) */}
       <InstructorDetailModal
         isOpen={isDetailModalOpen}
         onClose={() => setIsDetailModalOpen(false)}
-        instructor={detailInstructor}
+        instructor={activeDetailInstructor}
         onEvaluate={handleOpenEvaluate}
       />
 
