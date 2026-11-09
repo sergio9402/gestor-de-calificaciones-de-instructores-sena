@@ -1,5 +1,5 @@
 const User = require('../models/User');
-const Evaluation = require('../models/Evaluation');
+const evaluationService = require('./evaluationService');
 
 /**
  * Servicio de Lógica de Negocio para Instructores y Fichas
@@ -12,7 +12,7 @@ class InstructorService {
   async getInstructors(queryParams = {}) {
     const { estado, especialidad, search, sort = 'promedioGeneral' } = queryParams;
 
-    const filter = { rol: 'instructor' };
+    const filter = { rol: 'instructor', activo: { $ne: false } };
 
     if (estado && estado !== 'ALL') {
       filter.estado = estado;
@@ -36,14 +36,23 @@ class InstructorService {
     else if (sort === 'nombre') sortOption.nombre = 1;
     else sortOption.createdAt = -1;
 
-    return await User.find(filter).sort(sortOption).lean();
+    return await User.find(filter)
+      .select(
+        'nombre especialidad fichasAsignadas estado centro avatar horario promedioMetodologia promedioTecnico promedioGeneral totalEvaluaciones'
+      )
+      .sort(sortOption)
+      .lean();
   }
 
   /**
    * Obtiene el perfil completo de un instructor con sus fichas y sus últimas evaluaciones
    */
   async getInstructorById(id) {
-    const instructor = await User.findOne({ _id: id, rol: 'instructor' }).lean();
+    const instructor = await User.findOne({
+      _id: id,
+      rol: 'instructor',
+      activo: { $ne: false },
+    }).lean();
 
     if (!instructor) {
       const error = new Error('Instructor no encontrado en el sistema');
@@ -51,14 +60,11 @@ class InstructorService {
       throw error;
     }
 
-    const recentEvaluations = await Evaluation.find({ instructorId: id })
-      .sort({ fecha: -1 })
-      .limit(5)
-      .lean();
+    const recentEvaluations = await evaluationService.getEvaluationsByInstructor(id);
 
     return {
       ...instructor,
-      ultimasEvaluaciones: recentEvaluations,
+      evaluacionesConsolidadas: recentEvaluations,
     };
   }
 
@@ -75,7 +81,7 @@ class InstructorService {
     }
 
     const updatedInstructor = await User.findOneAndUpdate(
-      { _id: id, rol: 'instructor' },
+      { _id: id, rol: 'instructor', activo: { $ne: false } },
       { estado: nuevoEstado },
       { new: true, runValidators: true }
     ).lean();
@@ -93,7 +99,10 @@ class InstructorService {
    * Genera el consolidado de métricas institucionales y de competencias docentes
    */
   async getInstitutionalMetrics() {
-    const instructors = await User.find({ rol: 'instructor' }).lean();
+    const instructors = await User.find({
+      rol: 'instructor',
+      activo: { $ne: false },
+    }).lean();
 
     if (instructors.length === 0) {
       return {
@@ -106,10 +115,23 @@ class InstructorService {
       };
     }
 
-    const totalEvaluaciones = instructors.reduce((acc, curr) => acc + (curr.totalEvaluaciones || 0), 0);
-    const sumGeneral = instructors.reduce((acc, curr) => acc + (curr.promedioGeneral || 0), 0);
-    const sumMetodologia = instructors.reduce((acc, curr) => acc + (curr.promedioMetodologia || 0), 0);
-    const sumTecnico = instructors.reduce((acc, curr) => acc + (curr.promedioTecnico || 0), 0);
+    const evaluatedInstructors = instructors.filter((instructor) => instructor.totalEvaluaciones > 0);
+    const totalEvaluaciones = evaluatedInstructors.reduce(
+      (acc, curr) => acc + curr.totalEvaluaciones,
+      0
+    );
+    const sumGeneral = evaluatedInstructors.reduce(
+      (acc, curr) => acc + curr.promedioGeneral * curr.totalEvaluaciones,
+      0
+    );
+    const sumMetodologia = evaluatedInstructors.reduce(
+      (acc, curr) => acc + curr.promedioMetodologia * curr.totalEvaluaciones,
+      0
+    );
+    const sumTecnico = evaluatedInstructors.reduce(
+      (acc, curr) => acc + curr.promedioTecnico * curr.totalEvaluaciones,
+      0
+    );
 
     const distribucionEstados = {
       enFormacion: instructors.filter((i) => i.estado === 'En Formación').length,
@@ -120,9 +142,13 @@ class InstructorService {
 
     return {
       totalInstructores: instructors.length,
-      promedioGlobal: Number((sumGeneral / instructors.length).toFixed(2)),
-      promedioMetodologia: Number((sumMetodologia / instructors.length).toFixed(2)),
-      promedioTecnico: Number((sumTecnico / instructors.length).toFixed(2)),
+      promedioGlobal: totalEvaluaciones ? Number((sumGeneral / totalEvaluaciones).toFixed(2)) : 0,
+      promedioMetodologia: totalEvaluaciones
+        ? Number((sumMetodologia / totalEvaluaciones).toFixed(2))
+        : 0,
+      promedioTecnico: totalEvaluaciones
+        ? Number((sumTecnico / totalEvaluaciones).toFixed(2))
+        : 0,
       totalEvaluaciones,
       distribucionEstados,
     };
@@ -130,4 +156,3 @@ class InstructorService {
 }
 
 module.exports = new InstructorService();
-

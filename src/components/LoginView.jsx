@@ -1,4 +1,6 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
+import { login } from '../services/authService';
+import PasswordRecoveryView from './PasswordRecoveryView';
 import { 
   GraduationCap, 
   ShieldCheck, 
@@ -7,47 +9,63 @@ import {
   Lock, 
   Mail, 
   ArrowRight, 
-  CheckCircle2, 
   Users, 
-  Building, 
-  Sparkles, 
   AlertCircle,
   Eye,
   EyeOff
 } from 'lucide-react';
-import { mockUsers, validCredentials } from '../data/mockFichas';
 
 export default function LoginView({ onLogin }) {
+  const [recoveryToken] = useState(() => (
+    new URLSearchParams(window.location.hash.slice(1)).get('resetToken') || ''
+  ));
+  const [recoveryMode, setRecoveryMode] = useState(() => (
+    new URLSearchParams(window.location.hash.slice(1)).has('resetToken') ? 'reset' : ''
+  ));
   const [activeRoleTab, setActiveRoleTab] = useState('instructor'); // 'instructor' | 'coordinator' | 'aprendiz'
-  const [email, setEmail] = useState('carlos.mendoza@sena.edu.co');
-  const [password, setPassword] = useState('sena2026');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
-  // Handle role tab change and fill default demo credentials
-  const handleTabChange = (role) => {
-    setActiveRoleTab(role);
-    setError('');
-    if (role === 'instructor') {
-      setEmail('carlos.mendoza@sena.edu.co');
-      setPassword('sena2026');
-    } else if (role === 'coordinator') {
-      setEmail('sofia.restrepo@sena.edu.co');
-      setPassword('admin2026');
-    } else {
-      setEmail('aprendiz.adso@misena.edu.co');
-      setPassword('adso2026');
+  useEffect(() => {
+    if (recoveryToken) {
+      window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}`);
     }
+  }, [recoveryToken]);
+
+  const clearRecoveryHash = () => {
+    window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}`);
   };
 
-  // Validación estricta de credenciales
+  if (recoveryMode) {
+    return (
+      <PasswordRecoveryView
+        mode={recoveryMode}
+        token={recoveryToken}
+        onBack={() => {
+          clearRecoveryHash();
+          setRecoveryMode('');
+        }}
+        onResetComplete={clearRecoveryHash}
+      />
+    );
+  }
+
+  const handleTabChange = (role) => {
+    setActiveRoleTab(role);
+    setEmail('');
+    setPassword('');
+    setError('');
+  };
+
   const handleFormSubmit = async (e) => {
     e.preventDefault();
     setError('');
 
     const cleanEmail = email.trim().toLowerCase();
-    const cleanPassword = password.trim();
+    const cleanPassword = password;
 
     if (!cleanEmail || !cleanPassword) {
       setError('Por favor diligencia tanto el correo como la contraseña institucional.');
@@ -55,81 +73,17 @@ export default function LoginView({ onLogin }) {
     }
 
     setLoading(true);
-
-    // 1. Intentar validar contra el Backend API en Express / MongoDB
     try {
-      const response = await fetch('http://localhost:5000/api/auth/login', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          email: cleanEmail,
-          password: cleanPassword,
-          rol: activeRoleTab,
-        }),
+      const user = await login({
+        email: cleanEmail,
+        password: cleanPassword,
+        role: activeRoleTab,
       });
-
-      const data = await response.json();
-
-      if (response.ok && data.success) {
-        // Almacenar token JWT si el backend está activo
-        if (data.token) {
-          localStorage.setItem('sena_token', data.token);
-        }
-        setLoading(false);
-        onLogin(data.data);
-        return;
-      } else {
-        // Si el backend rechazó la contraseña o el usuario
-        setLoading(false);
-        setError(data.message || 'Contraseña incorrecta o usuario no autorizado.');
-        return;
-      }
-    } catch (networkErr) {
-      // 2. Si el servidor backend no está encendido, validar estrictamente contra el registro local de credenciales
-      const matchedUser = validCredentials.find(
-        (cred) => cred.email.toLowerCase() === cleanEmail
-      );
-
-      if (!matchedUser) {
-        setLoading(false);
-        setError(`El correo "${cleanEmail}" no está registrado en el sistema.`);
-        return;
-      }
-
-      if (matchedUser.role !== activeRoleTab) {
-        setLoading(false);
-        setError(`Este usuario pertenece al rol "${matchedUser.role.toUpperCase()}", no a "${activeRoleTab.toUpperCase()}". Cambia de pestaña para continuar.`);
-        return;
-      }
-
-      // VALIDACIÓN ESTRICTA DE CONTRASEÑA
-      if (matchedUser.password !== cleanPassword) {
-        setLoading(false);
-        setError('❌ Contraseña incorrecta. Por favor verifica tus credenciales institucionales.');
-        return;
-      }
-
+      onLogin(user);
+    } catch (loginError) {
+      setError(loginError.message || 'No se pudo iniciar sesión. Verifica tus credenciales.');
+    } finally {
       setLoading(false);
-      onLogin(matchedUser.user);
-    }
-  };
-
-  const handleQuickLogin = (role) => {
-    setError('');
-    if (role === 'instructor') {
-      setEmail('carlos.mendoza@sena.edu.co');
-      setPassword('sena2026');
-      onLogin(mockUsers.instructor);
-    } else if (role === 'coordinator') {
-      setEmail('sofia.restrepo@sena.edu.co');
-      setPassword('admin2026');
-      onLogin(mockUsers.coordinator);
-    } else {
-      setEmail('aprendiz.adso@misena.edu.co');
-      setPassword('adso2026');
-      onLogin(mockUsers.aprendiz);
     }
   };
 
@@ -229,7 +183,7 @@ export default function LoginView({ onLogin }) {
                 <div>
                   <h3 className="text-sm font-bold text-[#00324D]">Acceso Directivo - Coordinación Académica</h3>
                   <p className="text-xs text-slate-500 mt-0.5 leading-relaxed">
-                    Panel de control gerencial para auditar estados operativos en vivo (en clase, disponible, asesoría), cumplimiento de evaluaciones y métricas de desempeño.
+                    Panel de control gerencial para consultar estados operativos registrados, fichas y métricas de desempeño.
                   </p>
                 </div>
               </>
@@ -286,11 +240,16 @@ export default function LoginView({ onLogin }) {
                 <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
                   Contraseña Institucional
                 </label>
-                <span className="text-[11px] text-[#39A900] font-semibold">
-                  {activeRoleTab === 'instructor' && 'Demo: sena2026'}
-                  {activeRoleTab === 'coordinator' && 'Demo: admin2026'}
-                  {activeRoleTab === 'aprendiz' && 'Demo: adso2026'}
-                </span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setError('');
+                    setRecoveryMode('request');
+                  }}
+                  className="text-xs font-semibold text-[#277800] hover:underline"
+                >
+                  ¿Olvidaste tu contraseña?
+                </button>
               </div>
               <div className="relative">
                 <Lock className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 transform -translate-y-1/2" />
@@ -334,46 +293,6 @@ export default function LoginView({ onLogin }) {
               )}
             </button>
           </form>
-
-          {/* Quick Access Shortcut Cards for Demo Evaluation */}
-          <div className="mt-8 pt-6 border-t border-slate-100">
-            <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block text-center mb-3">
-              ⚡ Acceso Rápido de Prueba (1 Clic)
-            </span>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-              <button
-                type="button"
-                onClick={() => handleQuickLogin('instructor')}
-                className="p-3 bg-slate-50 hover:bg-[#39A900]/10 border border-slate-200 hover:border-[#39A900]/40 rounded-xl text-left transition-all group"
-              >
-                <div className="flex items-center gap-2">
-                  <span className="w-2 h-2 rounded-full bg-[#39A900]"></span>
-                  <span className="text-xs font-bold text-slate-800 group-hover:text-[#39A900]">
-                    Ing. Carlos Mendoza
-                  </span>
-                </div>
-                <span className="text-[11px] text-slate-500 block mt-0.5">
-                  Instructor ADSO • Clave: sena2026
-                </span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => handleQuickLogin('coordinator')}
-                className="p-3 bg-slate-50 hover:bg-[#00324D]/10 border border-slate-200 hover:border-[#00324D]/40 rounded-xl text-left transition-all group"
-              >
-                <div className="flex items-center gap-2">
-                  <span className="w-2 h-2 rounded-full bg-[#00324D]"></span>
-                  <span className="text-xs font-bold text-slate-800 group-hover:text-[#00324D]">
-                    Dra. Sofía Restrepo
-                  </span>
-                </div>
-                <span className="text-[11px] text-slate-500 block mt-0.5">
-                  Coordinación • Clave: admin2026
-                </span>
-              </button>
-            </div>
-          </div>
 
         </div>
 

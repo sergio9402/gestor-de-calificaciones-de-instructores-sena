@@ -4,34 +4,29 @@ import {
   Clock, 
   MapPin, 
   Star, 
-  TrendingUp, 
   CheckCircle2, 
-  AlertCircle, 
-  Calendar, 
   BookOpen, 
   MessageSquare, 
   ShieldCheck, 
-  Sparkles,
-  ChevronRight,
   Activity
 } from 'lucide-react';
-import StarRating from './StarRating';
-import { mockFichas } from '../data/mockFichas';
 
-export default function InstructorDashboard({ user, instructors, onUpdateStatus }) {
-  // Encontrar datos actualizados en tiempo real desde el estado global
-  const currentInstructorData = instructors.find(
-    i => String(i.id || i._id) === String(user.id || user._id)
-  ) || user;
-
-  const myFichas = mockFichas.filter(
-    f => String(f.instructorId) === String(user.id || user._id)
-  );
+export default function InstructorDashboard({
+  user,
+  instructor,
+  fichas = [],
+  onUpdateStatus,
+  onRefresh,
+}) {
+  const currentInstructorData = instructor || user;
+  const myFichas = fichas;
 
   const [activeTab, setActiveTab] = useState('fichas'); // 'fichas' | 'evaluaciones'
   const [operationalStatus, setOperationalStatus] = useState(
     currentInstructorData.operationalStatus || currentInstructorData.estado || 'En Formación'
   );
+  const [statusError, setStatusError] = useState('');
+  const [savingStatus, setSavingStatus] = useState(false);
 
   // Sincronizar estado local si cambia externamente
   useEffect(() => {
@@ -42,11 +37,18 @@ export default function InstructorDashboard({ user, instructors, onUpdateStatus 
   }, [currentInstructorData]);
 
   // Manejador del cambio de estado operativo (sincroniza con Coordinación)
-  const handleStatusChange = (e) => {
+  const handleStatusChange = async (e) => {
     const newStatus = e.target.value;
+    setSavingStatus(true);
+    setStatusError('');
     setOperationalStatus(newStatus);
-    if (onUpdateStatus) {
-      onUpdateStatus(user.id || user._id, newStatus);
+    try {
+      await onUpdateStatus(newStatus);
+    } catch (error) {
+      setStatusError(error.message || 'No se pudo actualizar el estado.');
+      setOperationalStatus(currentInstructorData.estado || 'Disponible');
+    } finally {
+      setSavingStatus(false);
     }
   };
 
@@ -67,11 +69,15 @@ export default function InstructorDashboard({ user, instructors, onUpdateStatus 
   };
 
   // Métricas calculadas en vivo
-  const liveRating = Number(currentInstructorData.rating || currentInstructorData.promedioGeneral || 5.0).toFixed(1);
-  const liveMethodology = Number(currentInstructorData.methodology || currentInstructorData.promedioMetodologia || 5.0).toFixed(1);
-  const liveTechnical = Number(currentInstructorData.technicalDomain || currentInstructorData.promedioTecnico || 5.0).toFixed(1);
   const liveCount = currentInstructorData.ratingsCount || currentInstructorData.totalEvaluaciones || 0;
-  const liveEvaluations = currentInstructorData.evaluations || [];
+  const liveRating = liveCount ? Number(currentInstructorData.promedioGeneral || 0).toFixed(1) : '—';
+  const liveMethodology = liveCount ? Number(currentInstructorData.promedioMetodologia || 0).toFixed(1) : '—';
+  const liveTechnical = liveCount ? Number(currentInstructorData.promedioTecnico || 0).toFixed(1) : '—';
+  const liveEvaluations = currentInstructorData.evaluacionesConsolidadas || [];
+  const liveFeedbackCount = liveEvaluations.reduce(
+    (count, group) => count + (group.comentarios?.length || 0),
+    0
+  );
 
   return (
     <div className="space-y-8 animate-in fade-in duration-300">
@@ -130,11 +136,11 @@ export default function InstructorDashboard({ user, instructors, onUpdateStatus 
               <span className="text-[11px] font-bold text-slate-600 uppercase tracking-wider block">
                 Mi Estado Operativo Actual
               </span>
-              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
             </div>
             <select
               value={operationalStatus}
               onChange={handleStatusChange}
+              disabled={savingStatus}
               className="w-full text-xs font-bold bg-white border border-slate-200 rounded-xl px-3 py-2.5 text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#39A900] cursor-pointer shadow-xs"
             >
               <option value="En Formación">🟢 En Formación (En Aula)</option>
@@ -142,9 +148,10 @@ export default function InstructorDashboard({ user, instructors, onUpdateStatus 
               <option value="Disponible">⚪ Disponible en Sede</option>
               <option value="En Reunión">🟣 En Reunión Pedagógica</option>
             </select>
+            {statusError && <p role="alert" className="mt-2 text-xs text-red-700">{statusError}</p>}
             <p className="text-[10px] text-slate-500 mt-1.5 flex items-center gap-1 font-medium">
               <Activity className="w-3 h-3 text-[#39A900]" />
-              Sincronizado en tiempo real con Coordinación.
+              Guardado en el sistema; Coordinación lo verá al actualizar el panel.
             </p>
           </div>
 
@@ -222,7 +229,7 @@ export default function InstructorDashboard({ user, instructors, onUpdateStatus 
           }`}
         >
           <MessageSquare className="w-4 h-4" />
-          <span>Opiniones & Retroalimentación Anónima ({liveEvaluations.length})</span>
+          <span>Opiniones & Retroalimentación Anónima ({liveFeedbackCount})</span>
         </button>
       </div>
 
@@ -235,52 +242,80 @@ export default function InstructorDashboard({ user, instructors, onUpdateStatus 
                 Grupos de Formación y Horarios Asignados
               </h2>
               <p className="text-xs text-slate-500">
-                Seguimiento de grupos, ambientes de formación y tasa de participación en evaluaciones.
+                Seguimiento de grupos, ambientes, horarios y participación en evaluaciones.
               </p>
             </div>
-            <span className="text-xs bg-slate-100 text-slate-700 px-3 py-1 rounded-full font-semibold border">
-              Vigencia Académica 2026
-            </span>
+            <button
+              type="button"
+              onClick={onRefresh}
+              className="text-xs bg-white text-slate-700 px-3 py-2 rounded-lg font-semibold border hover:bg-slate-50"
+            >
+              Actualizar datos
+            </button>
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {myFichas.map((ficha) => {
-              const evalPercent = Math.round((ficha.completedEvaluations / ficha.totalStudents) * 100);
+              const totalStudents = ficha.totalAprendices || 0;
+              const completedEvaluations = ficha.totalEvaluaciones || 0;
+              const evalPercent = totalStudents
+                ? Math.min(100, Math.round((completedEvaluations / totalStudents) * 100))
+                : 0;
 
               return (
                 <div
-                  key={ficha.id}
+                  key={ficha._id}
                   className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm hover:shadow-md transition-all space-y-4"
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div>
                       <div className="flex items-center gap-2">
                         <span className="bg-[#39A900]/10 text-[#39A900] font-black text-xs px-2.5 py-0.5 rounded-md border border-[#39A900]/20">
-                          Ficha {ficha.code}
+                          Ficha {ficha.codigo}
                         </span>
-                        <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full border ${getStatusColor(ficha.status)}`}>
-                          {ficha.status}
+                        <span className="text-[11px] font-bold px-2 py-0.5 rounded-full border bg-slate-50 text-slate-700 border-slate-200">
+                          Periodo {ficha.periodo}
                         </span>
                       </div>
                       <h3 className="text-base font-bold text-slate-900 mt-2">
-                        {ficha.program}
+                        {ficha.programa}
                       </h3>
                       <p className="text-xs text-slate-500 mt-0.5 font-medium">
-                        {ficha.phase}
+                        {ficha.fechaInicio && ficha.fechaFin
+                          ? `${new Date(ficha.fechaInicio).toLocaleDateString('es-CO', { timeZone: 'UTC' })} – ${new Date(ficha.fechaFin).toLocaleDateString('es-CO', { timeZone: 'UTC' })}`
+                          : ficha.dias?.length ? ficha.dias.join(', ') : 'Días por confirmar'}
                       </p>
                     </div>
                   </div>
 
                   {/* Ficha Details Grid */}
+                  {ficha.sesiones?.length ? (
+                    <div className="overflow-x-auto rounded-xl border border-slate-100 bg-slate-50 p-3">
+                      <table className="w-full min-w-[420px] text-left text-xs">
+                        <thead className="text-slate-500">
+                          <tr><th className="p-2">Día</th><th className="p-2">Horario</th><th className="p-2">Tema</th><th className="p-2">Ambiente</th></tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-200">
+                          {ficha.sesiones.map((session, index) => (
+                            <tr key={`${session.dia}-${session.horaInicio}-${index}`}>
+                              <td className="p-2 font-semibold">{session.dia}</td>
+                              <td className="p-2 whitespace-nowrap">{session.horaInicio}–{session.horaFin}</td>
+                              <td className="p-2">{session.tema || 'Por confirmar'}</td>
+                              <td className="p-2">{session.ambiente || 'Por confirmar'}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  ) : (
                   <div className="grid grid-cols-2 gap-3 py-2 bg-slate-50 p-3 rounded-xl border border-slate-100 text-xs">
                     <div>
                       <span className="text-slate-400 font-medium block">Horario & Días:</span>
                       <span className="font-bold text-slate-800 flex items-center gap-1 mt-0.5">
                         <Clock className="w-3.5 h-3.5 text-[#39A900]" />
-                        {ficha.jornada}
+                        {ficha.horaInicio} – {ficha.horaFin}
                       </span>
                     </div>
-
                     <div>
                       <span className="text-slate-400 font-medium block">Ambiente Físico:</span>
                       <span className="font-bold text-slate-800 flex items-center gap-1 mt-0.5">
@@ -293,7 +328,7 @@ export default function InstructorDashboard({ user, instructors, onUpdateStatus 
                       <span className="text-slate-400 font-medium block">Aprendices Inscritos:</span>
                       <span className="font-bold text-slate-800 flex items-center gap-1 mt-0.5">
                         <Users className="w-3.5 h-3.5 text-slate-500" />
-                        {ficha.totalStudents} aprendices
+                        {totalStudents} aprendices
                       </span>
                     </div>
 
@@ -301,10 +336,11 @@ export default function InstructorDashboard({ user, instructors, onUpdateStatus 
                       <span className="text-slate-400 font-medium block">Evaluaciones Listas:</span>
                       <span className="font-bold text-emerald-700 flex items-center gap-1 mt-0.5">
                         <CheckCircle2 className="w-3.5 h-3.5" />
-                        {ficha.completedEvaluations} de {ficha.totalStudents} ({evalPercent}%)
+                        {completedEvaluations} de {totalStudents} ({evalPercent}%)
                       </span>
                     </div>
                   </div>
+                  )}
 
                   {/* Progress Bar of Evaluations */}
                   <div>
@@ -323,6 +359,11 @@ export default function InstructorDashboard({ user, instructors, onUpdateStatus 
               );
             })}
           </div>
+          {myFichas.length === 0 && (
+            <p className="rounded-xl border border-slate-200 bg-white p-6 text-sm text-slate-600">
+              No tienes fichas activas asignadas actualmente.
+            </p>
+          )}
         </div>
       )}
 
@@ -332,7 +373,7 @@ export default function InstructorDashboard({ user, instructors, onUpdateStatus 
           <div className="flex items-center justify-between">
             <div>
               <h2 className="text-lg font-bold text-[#00324D]">
-                Comentarios Constructivos de los Aprendices ({liveEvaluations.length})
+                Comentarios Constructivos de los Aprendices ({liveFeedbackCount})
               </h2>
               <p className="text-xs text-slate-500">
                 Retroalimentación 100% anónima para el fortalecimiento de tus prácticas pedagógicas.
@@ -340,7 +381,7 @@ export default function InstructorDashboard({ user, instructors, onUpdateStatus 
             </div>
             <div className="flex items-center gap-1 text-xs text-emerald-700 font-bold bg-emerald-50 px-3 py-1.5 rounded-full border border-emerald-100">
               <ShieldCheck className="w-4 h-4 text-[#39A900]" />
-              <span>Garantía de Anonimato SENA</span>
+              <span>Respuestas sin identidad; publicación desde cinco respuestas</span>
             </div>
           </div>
 
@@ -348,41 +389,44 @@ export default function InstructorDashboard({ user, instructors, onUpdateStatus 
             {liveEvaluations.length > 0 ? (
               liveEvaluations.map((item) => (
                 <div
-                  key={item.id || item._id}
+                  key={`${item.fichaId}-${item.periodo}`}
                   className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm space-y-3"
                 >
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2.5">
-                      <div className="w-8 h-8 rounded-full bg-[#39A900]/10 text-[#39A900] font-bold text-xs flex items-center justify-center">
-                        A
-                      </div>
                       <div>
-                        <span className="text-xs font-bold text-slate-800">Aprendiz de Ficha</span>
+                        <span className="text-xs font-bold text-slate-800">
+                          Ficha {myFichas.find((ficha) => String(ficha._id) === String(item.fichaId))?.codigo || ''}
+                        </span>
                         <span className="text-[10px] text-slate-400 block">
-                          {item.date || (item.fecha ? new Date(item.fecha).toISOString().split('T')[0] : 'Reciente')}
+                          Periodo {item.periodo} · {item.totalEvaluaciones} respuestas
                         </span>
                       </div>
                     </div>
 
                     <div className="flex items-center gap-2">
                       <span className="text-xs font-bold text-amber-900 bg-amber-50 px-2 py-0.5 rounded-md border border-amber-200">
-                        ★ {item.rating ? Number(item.rating).toFixed(1) : Number((item.methodology + item.technicalDomain) / 2).toFixed(1)} / 5.0
+                        ★ {((item.promedioMetodologia + item.promedioTecnico) / 2).toFixed(1)} / 5.0
                       </span>
                     </div>
                   </div>
 
                   <div className="flex items-center gap-2">
                     <span className="text-[11px] bg-slate-50 border border-slate-200 px-2.5 py-0.5 rounded-md font-semibold text-slate-700">
-                      Metodología: <strong className="text-[#39A900]">{item.methodology || item.calificacionMetodologia}/5</strong>
+                      Metodología: <strong className="text-[#39A900]">{item.promedioMetodologia}/5</strong>
                     </span>
                     <span className="text-[11px] bg-slate-50 border border-slate-200 px-2.5 py-0.5 rounded-md font-semibold text-slate-700">
-                      Dominio Técnico: <strong className="text-[#00324D]">{item.technicalDomain || item.calificacionTecnica}/5</strong>
+                      Dominio Técnico: <strong className="text-[#00324D]">{item.promedioTecnico}/5</strong>
                     </span>
                   </div>
 
-                  <p className="text-xs sm:text-sm text-slate-700 italic bg-slate-50/70 p-3.5 rounded-xl border border-slate-100">
-                    "{item.comment || item.comentario}"
-                  </p>
+                  <ul className="space-y-2">
+                    {item.comentarios.map((comment, index) => (
+                      <li key={`${item.fichaId}-${item.periodo}-${index}`} className="text-xs sm:text-sm text-slate-700 italic bg-slate-50/70 p-3.5 rounded-xl border border-slate-100">
+                        “{comment}”
+                      </li>
+                    ))}
+                  </ul>
                 </div>
               ))
             ) : (

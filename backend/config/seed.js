@@ -12,6 +12,7 @@ try {
 const User = require('../models/User');
 const Evaluation = require('../models/Evaluation');
 const connectDB = require('./db');
+const { hashPassword } = require('../utils/password');
 
 dotenv.config();
 
@@ -19,7 +20,6 @@ const seedInstructors = [
   {
     nombre: "Ing. Carlos Andrés Mendoza",
     email: "carlos.mendoza@sena.edu.co",
-    password: "sena2026",
     rol: "instructor",
     especialidad: "Análisis y Desarrollo de Software (ADSO) - Backend & APIs",
     centro: "Centro de Teleinformática y Producción Industrial - Regional Cauca",
@@ -35,7 +35,6 @@ const seedInstructors = [
   {
     nombre: "Dra. Laura Patricia Gómez",
     email: "laura.gomez@sena.edu.co",
-    password: "sena2026",
     rol: "instructor",
     especialidad: "Diseño Web UI/UX y Desarrollo Frontend (React & Tailwind)",
     centro: "Centro de Diseño y Metrología - Regional Distrito Capital",
@@ -51,7 +50,6 @@ const seedInstructors = [
   {
     nombre: "Lic. Jorge Eliecer Torres",
     email: "jorge.torres@sena.edu.co",
-    password: "sena2026",
     rol: "instructor",
     especialidad: "Bases de Datos Relacionales y NoSQL (MySQL, MongoDB)",
     centro: "Centro de Servicios y Gestión Empresarial - Regional Antioquia",
@@ -67,7 +65,6 @@ const seedInstructors = [
   {
     nombre: "Dra. Sofía Restrepo Cárdenas",
     email: "sofia.restrepo@sena.edu.co",
-    password: "admin2026",
     rol: "coordinador",
     especialidad: "Coordinación Académica y Aseguramiento de Calidad",
     centro: "Dirección General SENA",
@@ -83,54 +80,69 @@ const seedInstructors = [
 ];
 
 const seedData = async () => {
-  try {
-    if (process.env.MONGO_URI.includes('<tu_usuario>') || process.env.MONGO_URI.includes('<tu_contraseña>')) {
-      console.error('\n=============================================================');
-      console.error('❌ ERROR: Aún no has configurado tus credenciales en backend/.env');
-      console.error('Debes reemplazar "<tu_usuario>" y "<tu_contraseña>" por tu usuario y clave reales de MongoDB Atlas.');
-      console.error('=============================================================\n');
-      process.exit(1);
-    }
-
-    await connectDB();
-    console.log('[Seed] Limpiando colecciones anteriores...');
-    await User.deleteMany();
-    await Evaluation.deleteMany();
-
-    console.log('[Seed] Insertando usuarios iniciales...');
-    const createdUsers = await User.insertMany(seedInstructors);
-
-    // Insertar evaluaciones de prueba para el primer instructor
-    const carlosInstructor = createdUsers.find(u => u.email === 'carlos.mendoza@sena.edu.co');
-    if (carlosInstructor) {
-      await Evaluation.create([
-        {
-          instructorId: carlosInstructor._id,
-          calificacionMetodologia: 5,
-          calificacionTecnica: 5,
-          comentario: "Excelente dominio de Node.js y arquitecturas limpias.",
-          fecha: new Date(),
-        },
-        {
-          instructorId: carlosInstructor._id,
-          calificacionMetodologia: 4,
-          calificacionTecnica: 5,
-          comentario: "Muy buena pedagogía en las sesiones de asesoría técnica.",
-          fecha: new Date(),
-        }
-      ]);
-    }
-
-    console.log('[Seed] ¡Datos de prueba cargados exitosamente en MongoDB Atlas!');
-    process.exit(0);
-  } catch (error) {
-    console.error(`\n[Seed Error] Falló la inserción: ${error.message}`);
-    process.exit(1);
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error('El seed con datos de demostración está deshabilitado en producción.');
   }
+
+  if (
+    !process.env.MONGO_URI ||
+    process.env.MONGO_URI.includes('<usuario>') ||
+    process.env.MONGO_URI.includes('<password>')
+  ) {
+    throw new Error('Configura MONGO_URI con una conexión válida en backend/.env.');
+  }
+  if (!process.env.DEMO_INITIAL_PASSWORD || process.env.DEMO_INITIAL_PASSWORD.length < 12) {
+    throw new Error(
+      'Configura DEMO_INITIAL_PASSWORD con al menos 12 caracteres para cargar datos demo.'
+    );
+  }
+
+  await connectDB();
+  if (await User.exists({}) || await Evaluation.exists({})) {
+    throw new Error(
+      'La base de datos no está vacía. El seed se canceló para preservar los datos existentes.'
+    );
+  }
+
+  console.log('[Seed] Insertando usuarios de demostración...');
+  const usersWithHashedPasswords = await Promise.all(
+    seedInstructors.map(async (instructor) => ({
+      ...instructor,
+      password: await hashPassword(process.env.DEMO_INITIAL_PASSWORD),
+    }))
+  );
+  const createdUsers = await User.create(usersWithHashedPasswords);
+
+  const carlosInstructor = createdUsers.find(
+    (user) => user.email === 'carlos.mendoza@sena.edu.co'
+  );
+  if (carlosInstructor) {
+    await Evaluation.create([
+      {
+        instructorId: carlosInstructor._id,
+        calificacionMetodologia: 5,
+        calificacionTecnica: 5,
+        comentario: 'Excelente dominio de Node.js y arquitecturas limpias.',
+      },
+      {
+        instructorId: carlosInstructor._id,
+        calificacionMetodologia: 4,
+        calificacionTecnica: 5,
+        comentario: 'Muy buena pedagogía en las sesiones de asesoría técnica.',
+      },
+    ]);
+  }
+
+  console.log('[Seed] Datos de demostración cargados.');
 };
 
 if (process.argv[2] === '--run') {
-  seedData();
+  seedData()
+    .catch((error) => {
+      console.error(`[Seed Error] ${error.message}`);
+      process.exitCode = 1;
+    })
+    .finally(() => mongoose.disconnect());
 }
 
 module.exports = seedData;

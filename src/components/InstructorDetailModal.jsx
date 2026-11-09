@@ -5,13 +5,18 @@ import StarRating from './StarRating';
 export default function InstructorDetailModal({ instructor, isOpen, onClose, onEvaluate }) {
   if (!isOpen || !instructor) return null;
 
-  const ratingVal = Number(instructor.rating !== undefined ? instructor.rating : (instructor.promedioGeneral || 5.0)).toFixed(1);
-  const methVal = Number(instructor.methodology !== undefined ? instructor.methodology : (instructor.promedioMetodologia || 5.0)).toFixed(1);
-  const techVal = Number(instructor.technicalDomain !== undefined ? instructor.technicalDomain : (instructor.promedioTecnico || 5.0)).toFixed(1);
+  const totalEvaluations = instructor.totalEvaluaciones || 0;
+  const ratingVal = totalEvaluations ? Number(instructor.promedioGeneral || 0).toFixed(1) : '—';
+  const methVal = totalEvaluations ? Number(instructor.promedioMetodologia || 0).toFixed(1) : '—';
+  const techVal = totalEvaluations ? Number(instructor.promedioTecnico || 0).toFixed(1) : '—';
   const instName = instructor.name || instructor.nombre || 'Instructor';
   const instModule = instructor.module || instructor.especialidad || 'Módulo de Formación';
   const instCenter = instructor.center || instructor.centro || 'Centro SENA';
-  const evaluationsList = instructor.evaluations || [];
+  const evaluationsList = instructor.evaluacionesConsolidadas || [];
+  const feedbackCount = evaluationsList.reduce(
+    (count, group) => count + (group.comentarios?.length || 0),
+    0
+  );
 
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 animate-in fade-in duration-200">
@@ -81,37 +86,28 @@ export default function InstructorDetailModal({ instructor, isOpen, onClose, onE
           <div className="flex items-center justify-between">
             <h3 className="font-bold text-slate-800 text-base flex items-center gap-2">
               <MessageSquare className="w-4 h-4 text-[#39A900]" />
-              Retroalimentaciones de Aprendices ({evaluationsList.length})
+              Retroalimentaciones de Aprendices ({feedbackCount})
             </h3>
             <span className="text-xs text-slate-400 font-medium flex items-center gap-1">
               <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
-              Comentarios Anónimos Verificados
+              Comentarios sin datos identificativos
             </span>
           </div>
 
           {evaluationsList.length > 0 ? (
             <div className="space-y-3">
               {evaluationsList.map((evalItem) => {
-                const itemRating = evalItem.rating !== undefined 
-                  ? Number(evalItem.rating).toFixed(1)
-                  : Number(((evalItem.methodology || evalItem.calificacionMetodologia || 5) + (evalItem.technicalDomain || evalItem.calificacionTecnica || 5)) / 2).toFixed(1);
-
+                const itemRating = ((evalItem.promedioMetodologia + evalItem.promedioTecnico) / 2).toFixed(1);
                 return (
                   <div 
-                    key={evalItem.id || evalItem._id} 
+                    key={`${evalItem.fichaId}-${evalItem.periodo}`}
                     className="p-4 rounded-2xl bg-slate-50 border border-slate-200/80 hover:border-slate-300 transition-all"
                   >
                     <div className="flex items-center justify-between gap-2 mb-2">
-                      <div className="flex items-center gap-2">
-                        <div className="w-7 h-7 rounded-full bg-[#39A900]/10 text-[#39A900] font-bold text-xs flex items-center justify-center">
-                          A
-                        </div>
-                        <div>
-                          <span className="text-xs font-bold text-slate-800">Aprendiz SENA (Anónimo)</span>
-                          <span className="text-[10px] text-slate-400 block">
-                            {evalItem.date || (evalItem.fecha ? new Date(evalItem.fecha).toISOString().split('T')[0] : 'Reciente')}
-                          </span>
-                        </div>
+                      <div>
+                        <span className="text-xs font-bold text-slate-800">
+                          Periodo {evalItem.periodo} · {evalItem.totalEvaluaciones} respuestas
+                        </span>
                       </div>
 
                       <div className="flex items-center gap-2">
@@ -124,16 +120,20 @@ export default function InstructorDetailModal({ instructor, isOpen, onClose, onE
                     {/* Competencies Badges in review */}
                     <div className="flex flex-wrap gap-2 mb-2">
                       <span className="text-[11px] bg-white border border-slate-200 px-2 py-0.5 rounded-md text-slate-600">
-                        Metodología: <strong className="text-emerald-700">{evalItem.methodology || evalItem.calificacionMetodologia}/5</strong>
+                        Metodología promedio: <strong className="text-emerald-700">{evalItem.promedioMetodologia}/5</strong>
                       </span>
                       <span className="text-[11px] bg-white border border-slate-200 px-2 py-0.5 rounded-md text-slate-600">
-                        Dominio Técnico: <strong className="text-[#00324D]">{evalItem.technicalDomain || evalItem.calificacionTecnica}/5</strong>
+                        Dominio Técnico promedio: <strong className="text-[#00324D]">{evalItem.promedioTecnico}/5</strong>
                       </span>
                     </div>
 
-                    <p className="text-xs sm:text-sm text-slate-700 italic leading-relaxed">
-                      "{evalItem.comment || evalItem.comentario}"
-                    </p>
+                    <ul className="space-y-2">
+                      {(evalItem.comentarios || []).map((comment, index) => (
+                        <li key={`${evalItem.fichaId}-${evalItem.periodo}-${index}`} className="text-xs sm:text-sm text-slate-700 italic leading-relaxed">
+                          “{comment}”
+                        </li>
+                      ))}
+                    </ul>
                   </div>
                 );
               })}
@@ -141,8 +141,7 @@ export default function InstructorDetailModal({ instructor, isOpen, onClose, onE
           ) : (
             <div className="p-8 text-center text-slate-400">
               <MessageSquare className="w-10 h-10 mx-auto text-slate-300 mb-2" />
-              <p className="text-sm">Aún no hay evaluaciones registradas para este instructor.</p>
-              <p className="text-xs mt-1">¡Sé el primero en dejar una retroalimentación anónima!</p>
+              <p className="text-sm">Los comentarios se muestran al alcanzar al menos cinco respuestas en el grupo.</p>
             </div>
           )}
         </div>
@@ -155,7 +154,7 @@ export default function InstructorDetailModal({ instructor, isOpen, onClose, onE
           >
             Cerrar
           </button>
-          <button
+          {onEvaluate && <button
             onClick={() => {
               onClose();
               onEvaluate(instructor);
@@ -164,7 +163,7 @@ export default function InstructorDetailModal({ instructor, isOpen, onClose, onE
           >
             <Plus className="w-4 h-4" />
             <span>Evaluar a este Instructor</span>
-          </button>
+          </button>}
         </div>
       </div>
     </div>

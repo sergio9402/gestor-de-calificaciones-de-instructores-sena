@@ -37,7 +37,7 @@ const errorHandler = (err, req, res, next) => {
   }
 
   // Error HTTP personalizado (si tiene statusCode)
-  const statusCode = err.statusCode || res.statusCode >= 400 ? res.statusCode : 500;
+  const statusCode = err.statusCode || (res.statusCode >= 400 ? res.statusCode : 500);
 
   res.status(statusCode).json({
     success: false,
@@ -57,4 +57,3 @@ module.exports = {
   errorHandler,
   asyncHandler,
 };
-

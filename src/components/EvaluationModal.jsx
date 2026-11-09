@@ -7,6 +7,7 @@ export default function EvaluationModal({
   onClose,
   instructors,
   selectedInstructor,
+  selectedFichaId,
   onSubmitEvaluation
 }) {
   const [instructorId, setInstructorId] = useState('');
@@ -42,7 +43,7 @@ export default function EvaluationModal({
     }
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     if (!instructorId) {
       setError('Por favor selecciona un instructor para evaluar.');
@@ -54,20 +55,24 @@ export default function EvaluationModal({
     }
 
     setIsSubmitting(true);
-    setTimeout(() => {
-      onSubmitEvaluation({
+    try {
+      await onSubmitEvaluation({
         instructorId: instructorId,
+        fichaId: selectedFichaId,
         methodology: Number(methodology),
         technicalDomain: Number(technicalDomain),
         comment: comment.trim(),
         date: new Date().toISOString().split('T')[0]
       });
-      setIsSubmitting(false);
       setComment('');
       setMethodology(5);
       setTechnicalDomain(5);
       onClose();
-    }, 300);
+    } catch (submitError) {
+      setError(submitError.message || 'No se pudo enviar la evaluación.');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -101,7 +106,7 @@ export default function EvaluationModal({
         <div className="bg-emerald-50/80 border-b border-emerald-100 px-5 py-2.5 flex items-center gap-2.5 text-xs text-emerald-800 font-medium">
           <ShieldCheck className="w-4 h-4 text-[#39A900] shrink-0" />
           <span>
-            <strong>Garantía de Privacidad:</strong> Tu identidad nunca será visible para el instructor ni coordinadores.
+            <strong>Privacidad:</strong> La respuesta no guarda tu identificador; el registro que evita duplicados se almacena por separado.
           </span>
         </div>
 

@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const { hashPassword, isPasswordHash } = require('../utils/password');
 
 const userSchema = new mongoose.Schema(
   {
@@ -15,9 +16,18 @@ const userSchema = new mongoose.Schema(
       lowercase: true,
       trim: true,
       match: [
-        /^\w+([.-]?\w+)*@\w+([.-]?\w+)*(\.\w{2,3})+$/,
+        /^\w+([.-]?\w+)*@\w+([.-]?\w+)*(\.\w{2,})+$/,
         'Por favor ingresa un correo electrónico institucional válido',
       ],
+    },
+    tipoDocumento: {
+      type: String,
+      enum: ['CC', 'TI'],
+    },
+    documento: {
+      type: String,
+      trim: true,
+      match: [/^\d{6,15}$/, 'El documento debe contener entre 6 y 15 dígitos.'],
     },
     password: {
       type: String,
@@ -29,8 +39,8 @@ const userSchema = new mongoose.Schema(
       type: String,
       required: [true, 'El rol es obligatorio'],
       enum: {
-        values: ['instructor', 'coordinador'],
-        message: 'El rol debe ser "instructor" o "coordinador"',
+        values: ['instructor', 'coordinador', 'aprendiz'],
+        message: 'El rol debe ser "instructor", "coordinador" o "aprendiz"',
       },
     },
     especialidad: {
@@ -41,6 +51,20 @@ const userSchema = new mongoose.Schema(
     fichasAsignadas: {
       type: [String],
       default: [],
+    },
+    fichasInscritas: [{
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Ficha',
+    }],
+    activo: {
+      type: Boolean,
+      default: true,
+    },
+    authVersion: {
+      type: Number,
+      default: 0,
+      min: 0,
+      select: false,
     },
     estado: {
       type: String,
@@ -94,8 +118,32 @@ const userSchema = new mongoose.Schema(
   }
 );
 
+userSchema.pre('save', async function hashModifiedPassword() {
+  if (this.isModified('password') && !isPasswordHash(this.password)) {
+    this.password = await hashPassword(this.password);
+  }
+});
+
+userSchema.pre('findOneAndUpdate', async function hashUpdatedPassword() {
+  const update = this.getUpdate();
+  const hasDirectPassword = Object.prototype.hasOwnProperty.call(update, 'password');
+  const hasSetPassword =
+    update.$set &&
+    Object.prototype.hasOwnProperty.call(update.$set, 'password');
+  const password = hasDirectPassword ? update.password : update.$set?.password;
+  if ((hasDirectPassword || hasSetPassword) && !isPasswordHash(password)) {
+    const hashedPassword = await hashPassword(password);
+    if (hasSetPassword) update.$set.password = hashedPassword;
+    else update.password = hashedPassword;
+    this.setUpdate(update);
+  }
+});
+
 // Índice compuesto para acelerar búsquedas por rol y estado operativo
 userSchema.index({ rol: 1, estado: 1 });
+userSchema.index(
+  { tipoDocumento: 1, documento: 1 },
+  { unique: true, partialFilterExpression: { documento: { $type: 'string' } } }
+);
 
 module.exports = mongoose.model('User', userSchema);
-

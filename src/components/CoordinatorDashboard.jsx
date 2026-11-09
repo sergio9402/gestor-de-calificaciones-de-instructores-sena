@@ -20,14 +20,18 @@ import {
 import MetricsPanel from './MetricsPanel';
 import InstructorCard from './InstructorCard';
 import StarRating from './StarRating';
+import CoordinatorManagement from './CoordinatorManagement';
 
 export default function CoordinatorDashboard({ 
-  user, 
-  instructors, 
-  onSelectInstructor, 
-  onEvaluateInstructor 
+  user,
+  instructors = [],
+  metrics,
+  onSelectInstructor,
+  onRefresh,
+  onDataChanged,
+  onUserUpdated,
 }) {
-  const [activeTab, setActiveTab] = useState('operational'); // 'operational' | 'metrics' | 'directory'
+  const [activeTab, setActiveTab] = useState('operational');
   const [statusFilter, setStatusFilter] = useState('ALL');
   const [searchTerm, setSearchTerm] = useState('');
 
@@ -43,9 +47,7 @@ export default function CoordinatorDashboard({
     i => (i.operationalStatus || i.estado) === 'Disponible'
   ).length;
 
-  const avgOverall = instructors.length > 0
-    ? (instructors.reduce((acc, curr) => acc + Number(curr.rating || curr.promedioGeneral || 5.0), 0) / instructors.length).toFixed(2)
-    : '5.00';
+  const avgOverall = Number(metrics?.promedioGlobal || 0).toFixed(2);
 
   // Status badge helper con soporte para ambos campos
   const getStatusBadge = (status) => {
@@ -119,11 +121,21 @@ export default function CoordinatorDashboard({
             <Briefcase className="w-3.5 h-3.5 text-emerald-300" />
             <span>Panel Gerencial • Coordinación Académica</span>
           </div>
+
+          <div className="flex justify-end">
+            <button
+              type="button"
+              onClick={onRefresh}
+              className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50"
+            >
+              Actualizar datos
+            </button>
+          </div>
           <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight">
             Supervisión Operativa & Aseguramiento de Calidad
           </h1>
           <p className="text-slate-200 text-xs sm:text-sm mt-1.5 leading-relaxed">
-            Bienvenida, <strong>{user.name}</strong>. Monitorea en vivo el estado operativo de los instructores, las fichas en ejecución y los indicadores de satisfacción docente.
+            Bienvenida, <strong>{user.name}</strong>. Consulta el estado operativo registrado, las fichas en ejecución y los indicadores de satisfacción docente.
           </p>
         </div>
       </div>
@@ -194,7 +206,7 @@ export default function CoordinatorDashboard({
               <span className="text-xs text-slate-400 font-semibold">/ 5.0</span>
             </div>
             <span className="inline-block mt-1 text-[11px] font-bold text-emerald-700">
-              Nivel Sobresaliente
+              Métrica institucional
             </span>
           </div>
           <div className="w-12 h-12 bg-amber-50 rounded-2xl flex items-center justify-center text-amber-500 border border-amber-100">
@@ -214,7 +226,7 @@ export default function CoordinatorDashboard({
           }`}
         >
           <Activity className="w-4 h-4 text-[#39A900]" />
-          <span>Estado Operativo en Tiempo Real</span>
+          <span>          Estado Operativo</span>
         </button>
 
         <button
@@ -240,6 +252,17 @@ export default function CoordinatorDashboard({
           <Users className="w-4 h-4 text-[#39A900]" />
           <span>Directorio General</span>
         </button>
+        <button
+          onClick={() => setActiveTab('management')}
+          className={`px-5 py-2.5 rounded-xl text-sm font-bold transition-all flex items-center gap-2 ${
+            activeTab === 'management'
+              ? 'bg-[#00324D] text-white shadow-md'
+              : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
+          }`}
+        >
+          <Users className="w-4 h-4 text-[#39A900]" />
+          <span>Gestión Académica</span>
+        </button>
       </div>
 
       {/* Subview 1: Operational Status Table */}
@@ -253,7 +276,7 @@ export default function CoordinatorDashboard({
                 Bitácora de Estado Operativo de la Planta Docente
               </h2>
               <p className="text-xs text-slate-500">
-                Monitorea la ubicación física, fichas activas y el rendimiento docente en vivo.
+                Consulta la ubicación registrada, fichas activas y el rendimiento docente.
               </p>
             </div>
 
@@ -299,8 +322,8 @@ export default function CoordinatorDashboard({
               </thead>
               <tbody className="divide-y divide-slate-100 text-xs">
                 {filteredInstructors.map((inst) => {
-                  const ratingValue = Number(inst.rating || inst.promedioGeneral || 5.0);
                   const evalsCount = inst.ratingsCount || inst.totalEvaluaciones || 0;
+                  const ratingValue = evalsCount ? Number(inst.promedioGeneral || 0) : 0;
                   const currentStatus = inst.operationalStatus || inst.estado || 'Disponible';
 
                   return (
@@ -310,7 +333,7 @@ export default function CoordinatorDashboard({
                       <td className="py-4 px-4">
                         <div className="flex items-center gap-3">
                           <img
-                            src={inst.avatar}
+                            src={inst.avatar || 'https://placehold.co/40x40?text=SENA'}
                             alt={inst.name || inst.nombre}
                             className="w-10 h-10 rounded-xl object-cover ring-2 ring-slate-100"
                           />
@@ -341,8 +364,8 @@ export default function CoordinatorDashboard({
                       {/* Fichas */}
                       <td className="py-4 px-4 whitespace-nowrap">
                         <div className="flex flex-wrap gap-1">
-                          {inst.assignedFichas && inst.assignedFichas.length > 0 ? (
-                            inst.assignedFichas.map(f => (
+                          {inst.fichasAsignadas && inst.fichasAsignadas.length > 0 ? (
+                            inst.fichasAsignadas.map(f => (
                               <span key={f} className="bg-slate-100 text-slate-700 px-2 py-0.5 rounded text-[11px] font-bold border border-slate-200">
                                 {f}
                               </span>
@@ -356,9 +379,9 @@ export default function CoordinatorDashboard({
                       {/* Rating recalculado en vivo */}
                       <td className="py-4 px-4 whitespace-nowrap">
                         <div className="flex items-center gap-1.5">
-                          <StarRating value={ratingValue} size="sm" />
+                          {evalsCount > 0 && <StarRating value={ratingValue} size="sm" />}
                           <span className="font-extrabold text-slate-900 ml-1">
-                            {ratingValue.toFixed(1)}
+                            {evalsCount ? ratingValue.toFixed(1) : '—'}
                           </span>
                         </div>
                       </td>
@@ -395,7 +418,8 @@ export default function CoordinatorDashboard({
       {activeTab === 'metrics' && (
         <MetricsPanel
           instructors={instructors}
-          onEvaluateInstructor={onEvaluateInstructor}
+          metrics={metrics}
+          showEvaluate={false}
         />
       )}
 
@@ -406,11 +430,18 @@ export default function CoordinatorDashboard({
             <InstructorCard
               key={instructor.id || instructor._id}
               instructor={instructor}
-              onEvaluate={onEvaluateInstructor}
+              showEvaluate={false}
               onSelect={onSelectInstructor}
             />
           ))}
         </div>
+      )}
+
+      {activeTab === 'management' && (
+        <CoordinatorManagement
+          onDataChanged={onDataChanged}
+          onUserUpdated={onUserUpdated}
+        />
       )}
 
     </div>

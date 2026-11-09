@@ -8,6 +8,16 @@ const evaluationSchema = new mongoose.Schema(
       required: [true, 'El ID del instructor a evaluar es obligatorio'],
       index: true,
     },
+    fichaId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Ficha',
+      index: true,
+    },
+    periodo: {
+      type: String,
+      trim: true,
+      maxlength: 30,
+    },
     calificacionMetodologia: {
       type: Number,
       required: [true, 'La calificación de metodología es obligatoria'],
@@ -56,4 +66,3 @@ evaluationSchema.pre('save', function (next) {
 });
 
 module.exports = mongoose.model('Evaluation', evaluationSchema);
-

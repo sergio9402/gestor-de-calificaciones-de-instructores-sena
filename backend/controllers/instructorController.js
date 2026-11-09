@@ -24,6 +24,16 @@ class InstructorController {
    * GET /api/instructors/:id
    */
   getInstructorById = asyncHandler(async (req, res) => {
+    if (
+      req.user.rol !== 'coordinador' &&
+      String(req.user._id) !== req.params.id
+    ) {
+      return res.status(403).json({
+        success: false,
+        message: 'Solo puedes consultar tu propio perfil de instructor.',
+      });
+    }
+
     const instructor = await instructorService.getInstructorById(req.params.id);
 
     res.status(200).json({
@@ -37,6 +47,16 @@ class InstructorController {
    * PATCH /api/instructors/:id/status
    */
   updateOperationalStatus = asyncHandler(async (req, res) => {
+    if (
+      req.user.rol !== 'coordinador' &&
+      String(req.user._id) !== req.params.id
+    ) {
+      return res.status(403).json({
+        success: false,
+        message: 'Solo puedes actualizar tu propio estado operativo.',
+      });
+    }
+
     const { estado } = req.body;
 
     if (!estado) {
@@ -70,4 +90,3 @@ class InstructorController {
 }
 
 module.exports = new InstructorController();
-

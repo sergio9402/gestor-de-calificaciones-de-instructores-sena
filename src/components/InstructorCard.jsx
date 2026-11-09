@@ -2,11 +2,11 @@ import React from 'react';
 import { Star, BookOpen, Building2, MessageSquare, Award, ArrowUpRight, CheckCircle2 } from 'lucide-react';
 import StarRating from './StarRating';
 
-export default function InstructorCard({ instructor, onEvaluate, onSelect }) {
-  const ratingValue = Number(instructor.rating !== undefined ? instructor.rating : (instructor.promedioGeneral || 5.0));
-  const methodologyValue = Number(instructor.methodology !== undefined ? instructor.methodology : (instructor.promedioMetodologia || 5.0));
-  const technicalValue = Number(instructor.technicalDomain !== undefined ? instructor.technicalDomain : (instructor.promedioTecnico || 5.0));
+export default function InstructorCard({ instructor, onEvaluate, onSelect, showEvaluate = true }) {
   const evalsCount = instructor.ratingsCount !== undefined ? instructor.ratingsCount : (instructor.totalEvaluaciones || 0);
+  const ratingValue = evalsCount ? Number(instructor.promedioGeneral || 0) : 0;
+  const methodologyValue = evalsCount ? Number(instructor.promedioMetodologia || 0) : 0;
+  const technicalValue = evalsCount ? Number(instructor.promedioTecnico || 0) : 0;
 
   const instructorName = instructor.name || instructor.nombre || 'Instructor SENA';
   const instructorModule = instructor.module || instructor.especialidad || 'Formación Profesional';
@@ -29,7 +29,7 @@ export default function InstructorCard({ instructor, onEvaluate, onSelect }) {
             <div className="flex items-center gap-3.5">
               <div className="relative">
                 <img
-                  src={instructor.avatar}
+                  src={instructor.avatar || 'https://placehold.co/64x64?text=SENA'}
                   alt={instructorName}
                   className="w-16 h-16 rounded-2xl object-cover ring-2 ring-slate-100 group-hover:ring-[#39A900] transition-all duration-300 shadow-sm"
                 />
@@ -39,7 +39,7 @@ export default function InstructorCard({ instructor, onEvaluate, onSelect }) {
               </div>
               <div>
                 <span className={`inline-block text-[11px] font-semibold px-2.5 py-0.5 rounded-full border mb-1 ${getBadgeColor(ratingValue)}`}>
-                  {ratingValue >= 4.7 ? 'Instructor Destacado' : 'Instructor Certificado'}
+                  {evalsCount === 0 ? 'Sin evaluaciones' : ratingValue >= 4.7 ? 'Instructor Destacado' : 'Instructor Certificado'}
                 </span>
                 <h3 className="font-bold text-slate-900 text-base group-hover:text-[#00324D] transition-colors leading-snug">
                   {instructorName}
@@ -78,7 +78,7 @@ export default function InstructorCard({ instructor, onEvaluate, onSelect }) {
               <span className="text-[11px] font-semibold text-amber-900 block">Calificación General</span>
               <div className="flex items-center gap-2 mt-0.5">
                 <StarRating value={ratingValue} size="sm" />
-                <span className="text-base font-extrabold text-amber-950">{ratingValue.toFixed(1)}</span>
+                <span className="text-base font-extrabold text-amber-950">{evalsCount ? ratingValue.toFixed(1) : '—'}</span>
                 <span className="text-xs text-amber-700/80">/ 5.0</span>
               </div>
             </div>
@@ -98,12 +98,12 @@ export default function InstructorCard({ instructor, onEvaluate, onSelect }) {
                 <span className="flex items-center gap-1">
                   <span className="w-2 h-2 rounded-full bg-[#39A900]"></span> Metodología
                 </span>
-                <span className="font-bold text-slate-800">{methodologyValue.toFixed(1)}</span>
+                <span className="font-bold text-slate-800">{evalsCount ? methodologyValue.toFixed(1) : '—'}</span>
               </div>
               <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden">
                 <div 
                   className="bg-gradient-to-r from-[#39A900] to-emerald-400 h-2 rounded-full transition-all duration-500"
-                  style={{ width: `${Math.min(100, (methodologyValue / 5) * 100)}%` }}
+                  style={{ width: `${evalsCount ? Math.min(100, (methodologyValue / 5) * 100) : 0}%` }}
                 ></div>
               </div>
             </div>
@@ -113,12 +113,12 @@ export default function InstructorCard({ instructor, onEvaluate, onSelect }) {
                 <span className="flex items-center gap-1">
                   <span className="w-2 h-2 rounded-full bg-[#00324D]"></span> Dominio Técnico
                 </span>
-                <span className="font-bold text-slate-800">{technicalValue.toFixed(1)}</span>
+                <span className="font-bold text-slate-800">{evalsCount ? technicalValue.toFixed(1) : '—'}</span>
               </div>
               <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden">
                 <div 
                   className="bg-gradient-to-r from-[#00324D] to-cyan-700 h-2 rounded-full transition-all duration-500"
-                  style={{ width: `${Math.min(100, (technicalValue / 5) * 100)}%` }}
+                  style={{ width: `${evalsCount ? Math.min(100, (technicalValue / 5) * 100) : 0}%` }}
                 ></div>
               </div>
             </div>
@@ -135,13 +135,15 @@ export default function InstructorCard({ instructor, onEvaluate, onSelect }) {
           <span>Ver Reseñas</span>
           <ArrowUpRight className="w-3.5 h-3.5 text-slate-400" />
         </button>
-        <button
-          onClick={() => onEvaluate(instructor)}
-          className="flex-1 py-2 px-3 text-xs font-semibold text-white bg-[#39A900] hover:bg-[#2e8a00] rounded-xl transition-all shadow-sm hover:shadow flex items-center justify-center gap-1.5"
-        >
-          <Star className="w-3.5 h-3.5 fill-white text-white" />
-          <span>Calificar</span>
-        </button>
+        {showEvaluate && (
+          <button
+            onClick={() => onEvaluate(instructor)}
+            className="flex-1 py-2 px-3 text-xs font-semibold text-white bg-[#39A900] hover:bg-[#2e8a00] rounded-xl transition-all shadow-sm hover:shadow flex items-center justify-center gap-1.5"
+          >
+            <Star className="w-3.5 h-3.5 fill-white text-white" />
+            <span>Calificar</span>
+          </button>
+        )}
       </div>
     </div>
   );

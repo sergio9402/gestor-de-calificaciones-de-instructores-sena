@@ -12,6 +12,9 @@ backend/node_modules/
 .env.production.local
 backend/.env
 backend/.env.local
+/backend/data/3311976-test-import.json
+/backend/data/3311976-test-credentials.csv
+/backend/data/coordinator-test-credentials.csv
 
 # Compilación y producción (Frontend Vite)
 dist/
@@ -40,4 +43,3 @@ lerna-debug.log*
 .DS_Store
 Thumbs.db
 desktop.ini
-

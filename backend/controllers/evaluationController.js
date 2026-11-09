@@ -10,7 +10,11 @@ class EvaluationController {
    * POST /api/evaluations
    */
   createEvaluation = asyncHandler(async (req, res) => {
-    const result = await evaluationService.createEvaluation(req.body);
+    const result = await evaluationService.createEvaluation({
+      ...req.body,
+      esAnonimo: true,
+      learnerId: req.user._id,
+    });
 
     res.status(201).json({
       success: true,
@@ -24,6 +28,16 @@ class EvaluationController {
    * GET /api/evaluations/instructor/:instructorId
    */
   getInstructorEvaluations = asyncHandler(async (req, res) => {
+    if (
+      req.user.rol !== 'coordinador' &&
+      String(req.user._id) !== req.params.instructorId
+    ) {
+      return res.status(403).json({
+        success: false,
+        message: 'Solo puedes consultar tus propias evaluaciones.',
+      });
+    }
+
     const evaluations = await evaluationService.getEvaluationsByInstructor(req.params.instructorId);
 
     res.status(200).json({
@@ -49,4 +63,3 @@ class EvaluationController {
 }
 
 module.exports = new EvaluationController();
-
