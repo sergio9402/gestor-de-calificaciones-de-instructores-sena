@@ -373,6 +373,71 @@ contrato.
 El repositorio no fija una versión de Node.js mediante `engines`; se recomienda
 usar una versión LTS compatible con las dependencias instaladas.
 
+## Despliegue: backend en Render y frontend en Vercel
+
+El archivo [`render.yaml`](./render.yaml) define un Blueprint para el backend:
+usa `backend/` como raíz, instala las dependencias, ejecuta `npm start`,
+configura `/api/health` como health check y permite que Render genere un
+`JWT_SECRET`. La URI de MongoDB y los dominios públicos se ingresan como valores
+privados al crear el Blueprint.
+
+### Configurar el backend en Render
+
+Para crear un servicio desde el Blueprint:
+
+1. En Render, selecciona **New → Blueprint** y conecta este repositorio y la
+   rama que contiene `render.yaml`.
+2. Revisa que el servicio use `backend/` como raíz. Al configurar el Blueprint,
+   Render genera `JWT_SECRET` y solicita los valores marcados como secretos.
+3. Ingresa:
+   - `MONGO_URI`: URI de MongoDB Atlas. Autoriza en Atlas las conexiones desde
+     Render según la configuración de red de tu proyecto.
+   - `CLIENT_ORIGINS`: origen exacto del frontend en Vercel, por ejemplo
+     `https://mi-proyecto.vercel.app`, sin una barra final.
+   - `FRONTEND_URL`: URL completa del frontend en Vercel; se usa para formar
+     los enlaces de recuperación de contraseña.
+4. Conserva `NODE_ENV=production` y `ENABLE_TEST_DATA_IMPORT=false`. No agregues
+   `PORT`: Render asigna ese valor.
+5. Espera el deploy y prueba `https://<servicio>.onrender.com/api/health`.
+   El servicio conecta a MongoDB antes de empezar a escuchar, así que una URI
+   inválida o un acceso de red denegado también impiden que el health check pase.
+
+Si el servicio de Render ya existe y fue creado manualmente, el Blueprint no
+lo modifica automáticamente. En su página de configuración usa:
+
+- **Root Directory:** `backend`
+- **Build Command:** `npm install`
+- **Start Command:** `npm start`
+- **Health Check Path:** `/api/health`
+
+En **Environment**, configura `NODE_ENV=production`, `ENABLE_TEST_DATA_IMPORT=false`,
+`JWT_SECRET` (al menos 32 caracteres aleatorios), `MONGO_URI`, `CLIENT_ORIGINS`
+y `FRONTEND_URL`. Genera el secreto localmente y pégalo directamente en Render;
+no lo envíes por chat ni lo guardes en el repositorio:
+
+```powershell
+node -e "console.log(require('crypto').randomBytes(48).toString('hex'))"
+```
+
+### Configurar el frontend en Vercel
+
+En el proyecto de Vercel agrega la variable de entorno:
+
+```text
+VITE_API_URL=https://<servicio>.onrender.com/api
+```
+
+Usa el dominio real de tu backend Render y vuelve a desplegar Vercel para que
+Vite incorpore el valor. El dominio del frontend debe ser el mismo que
+autorizaste en `CLIENT_ORIGINS` y configuraste como `FRONTEND_URL`. Si usas
+dominio propio o alias de producción distintos, incluye todos los orígenes que
+realmente necesites en `CLIENT_ORIGINS`, separados por comas.
+
+La recuperación de contraseña requiere además las variables `SMTP_*` descritas
+en la sección [Correo de recuperación](#correo-de-recuperación). Estas no son
+necesarias para que arranque el backend; hasta configurarlas, la solicitud de
+recuperación indicará que el servicio de correo no está configurado.
+
 ## Instalación y ejecución local
 
 ### Clonar en otro computador (Windows / PowerShell)
