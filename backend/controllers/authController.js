@@ -1,9 +1,13 @@
 const jwt = require('jsonwebtoken');
-const User = require('../models/User');
 const { asyncHandler } = require('../middlewares/errorHandler');
 const { getJwtSecret } = require('../config/jwt');
 const { isPasswordHash, verifyPassword } = require('../utils/password');
 const passwordResetService = require('../services/passwordResetService');
+const {
+  findProfileByEmail,
+  findProfileById,
+  sanitizeUserProfile,
+} = require('../services/userProfileService');
 
 /**
  * Genera un token JWT para la sesión
@@ -43,33 +47,26 @@ class AuthController {
     }
 
     // Buscar usuario en base de datos
-    const query = { email: email.toLowerCase().trim() };
-    if (rol) query.rol = rol;
+    const account = await findProfileByEmail(email, rol);
 
-    const user = await User.findOne({
-      ...query,
-      activo: { $ne: false },
-    }).select('+password +authVersion');
-
-    if (!user || !(await verifyPassword(password, user.password))) {
+    if (!account || !(await verifyPassword(password, account.password))) {
       return res.status(401).json({
         success: false,
         message: 'Correo o contraseña incorrectos.',
       });
     }
 
-    if (!isPasswordHash(user.password)) {
-      user.password = password;
-      await user.save();
+    if (!isPasswordHash(account.password)) {
+      account.password = password;
+      await account.save();
     }
 
     // Generar token JWT firmado
-    const token = generateToken(user);
+    const user = sanitizeUserProfile(account);
+    const token = generateToken(account);
 
     // Retornar datos sin la contraseña
-    const userResponse = user.toObject();
-    delete userResponse.password;
-    delete userResponse.authVersion;
+    const userResponse = { ...user };
 
     res.status(200).json({
       success: true,
@@ -140,9 +137,9 @@ class AuthController {
       });
     }
 
-    const user = await User.findById(req.params.id).select('-password');
+    const profile = await findProfileById(req.params.id);
 
-    if (!user) {
+    if (!profile) {
       return res.status(404).json({
         success: false,
         message: 'Usuario no encontrado',
@@ -151,7 +148,7 @@ class AuthController {
 
     res.status(200).json({
       success: true,
-      data: user,
+      data: sanitizeUserProfile(profile),
     });
   });
 }

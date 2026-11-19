@@ -76,7 +76,7 @@ export default function PasswordRecoveryView({ mode, token, onBack, onResetCompl
             <p className="mt-1 text-sm text-slate-500">
               {isReset
                 ? 'Usa al menos 12 caracteres. Este enlace es de un solo uso y vence en 30 minutos.'
-                : 'Ingresa el correo de tu cuenta. Si está registrado, recibirás instrucciones para recuperar el acceso.'}
+                : 'Disponible para aprendices, instructores y coordinación. Ingresa el correo asociado a tu cuenta; si está registrado, recibirás instrucciones para recuperar el acceso.'}
             </p>
           </div>
         </div>

@@ -2,11 +2,12 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { AlertCircle, CalendarDays, Clock3, MapPin, RefreshCw, Star } from 'lucide-react';
 import EvaluationModal from './EvaluationModal';
 import Header from './Header';
-import { submitEvaluation } from '../services/evaluationService';
+import { getEvaluationRubric, submitEvaluation } from '../services/evaluationService';
 import { getLearnerSchedule } from '../services/managementService';
 
 export default function LearnerDashboard({ user, onLogout }) {
   const [fichas, setFichas] = useState([]);
+  const [rubric, setRubric] = useState([]);
   const [selectedFicha, setSelectedFicha] = useState(null);
   const [selectedInstructorId, setSelectedInstructorId] = useState('');
   const [loading, setLoading] = useState(true);
@@ -17,8 +18,12 @@ export default function LearnerDashboard({ user, onLogout }) {
     setLoading(true);
     setError('');
     try {
-      const data = await getLearnerSchedule();
+      const [data, evaluationRubric] = await Promise.all([
+        getLearnerSchedule(),
+        getEvaluationRubric(),
+      ]);
       setFichas(data || []);
+      setRubric(evaluationRubric || []);
     } catch (loadError) {
       setError(loadError.message || 'No se pudo conectar con el servidor.');
     } finally {
@@ -33,15 +38,13 @@ export default function LearnerDashboard({ user, onLogout }) {
   const handleEvaluation = async ({
     instructorId,
     fichaId,
-    methodology,
-    technicalDomain,
+    respuestas,
     comment,
   }) => {
     await submitEvaluation({
       instructorId,
       fichaId,
-      methodology,
-      technicalDomain,
+      answers: respuestas,
       comment,
     });
     await loadSchedule();
@@ -236,6 +239,7 @@ export default function LearnerDashboard({ user, onLogout }) {
           )
           : null}
         selectedFichaId={selectedFicha?._id}
+        rubric={rubric}
         onSubmitEvaluation={handleEvaluation}
       />
     </>

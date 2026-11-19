@@ -22,7 +22,19 @@ const passwordResetConfirmLimit = rateLimit({
   },
 });
 
+const loginRateLimit = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: process.env.NODE_ENV === 'test' ? 1000 : 25,
+  standardHeaders: 'draft-8',
+  legacyHeaders: false,
+  message: {
+    success: false,
+    message: 'Demasiados intentos de inicio de sesión. Por seguridad, espera 15 minutos.',
+  },
+});
+
 module.exports = {
+  loginRateLimit,
   passwordResetRequestLimit,
   passwordResetConfirmLimit,
 };

@@ -7,11 +7,26 @@ const test = require('node:test');
 const createApp = require('../app');
 const emailService = require('../config/email');
 const Evaluation = require('../models/Evaluation');
+const EvaluationAnswer = require('../models/EvaluationAnswer');
+const { questions } = require('../config/evaluationRubric');
+const CoordinatorProfile = require('../models/CoordinatorProfile');
+const InstructorProfile = require('../models/InstructorProfile');
+const LearnerProfile = require('../models/LearnerProfile');
 const PasswordResetToken = require('../models/PasswordResetToken');
-const User = require('../models/User');
+const Ficha = require('../models/Ficha');
+const Announcement = require('../models/Announcement');
+const Enrollment = require('../models/Enrollment');
+const Period = require('../models/Period');
+const Schedule = require('../models/Schedule');
+const { getInstructorReportData } = require('../services/instructorReportService');
 
 const password = 'ClaveSegura-2026';
 const jwtSecret = 'test-secret-with-more-than-thirty-two-characters';
+const answersForEvaluation = () => questions.map((question) => ({
+  codigo: question.code,
+  calificacion: question.code === 'dominio_tecnico' ? 5 : 4,
+  noAplica: false,
+}));
 let mongo;
 let server;
 let baseUrl;
@@ -35,6 +50,7 @@ async function login(email, role, loginPassword = password) {
     body: JSON.stringify({ email, password: loginPassword, rol: role }),
   });
   assert.equal(response.status, 200, body.message);
+  assert.equal(Object.hasOwn(body.data, 'password'), false);
   return body.token;
 }
 
@@ -82,12 +98,19 @@ test('role dashboards and anonymous evaluation flow work with isolated MongoDB',
     emailService.sendPasswordResetEmail = originalSendPasswordResetEmail;
   });
 
-  await User.create({
+  const coordinator = await CoordinatorProfile.create({
     nombre: 'Coordinación de Prueba',
     email: 'coordinacion@example.com',
     password,
     rol: 'coordinador',
   });
+  const storedCoordinator = await CoordinatorProfile.collection.findOne({ _id: coordinator._id });
+  assert.equal(storedCoordinator.rol, 'coordinador');
+  assert.equal(storedCoordinator.activo, true);
+  assert.equal(storedCoordinator.authVersion, 0);
+  assert.match(storedCoordinator.password, /^scrypt\$/);
+  assert.ok(storedCoordinator.createdAt instanceof Date);
+  assert.ok(storedCoordinator.updatedAt instanceof Date);
   const coordinatorToken = await login('coordinacion@example.com', 'coordinador');
 
   const instructorResult = await request('/api/management/users', {
@@ -100,10 +123,22 @@ test('role dashboards and anonymous evaluation flow work with isolated MongoDB',
       rol: 'instructor',
       especialidad: 'Desarrollo de software',
       centro: 'Centro de Prueba',
+      tipoDocumento: 'CC',
+      documento: '9988776655',
     }),
   });
   assert.equal(instructorResult.response.status, 201, instructorResult.body.message);
   const instructorId = instructorResult.body.data._id;
+  assert.equal(Object.hasOwn(instructorResult.body.data, 'password'), false);
+  const storedInstructor = await InstructorProfile.collection.findOne({
+    _id: new mongoose.Types.ObjectId(instructorId),
+  });
+  assert.equal(storedInstructor.rol, 'instructor');
+  assert.equal(storedInstructor.email, 'instructor@example.com');
+  assert.match(storedInstructor.password, /^scrypt\$/);
+  assert.equal(instructorResult.body.data.nombre, 'Instructor de Prueba');
+  assert.equal(instructorResult.body.data.email, 'instructor@example.com');
+  assert.equal(instructorResult.body.data.documento, '9988776655');
 
   const learners = [];
   for (let index = 1; index <= 5; index += 1) {
@@ -118,6 +153,7 @@ test('role dashboards and anonymous evaluation flow work with isolated MongoDB',
       }),
     });
     assert.equal(result.response.status, 201, result.body.message);
+    assert.equal(Object.hasOwn(result.body.data, 'password'), false);
     learners.push(result.body.data);
   }
 
@@ -138,6 +174,15 @@ test('role dashboards and anonymous evaluation flow work with isolated MongoDB',
   });
   assert.equal(fichaResult.response.status, 201, fichaResult.body.message);
   const fichaId = fichaResult.body.data._id;
+  assert.equal(await Period.countDocuments({ nombre: '2026-2' }), 1);
+  assert.equal(await Enrollment.countDocuments({ fichaId, estado: 'activa' }), 5);
+  assert.equal(await Schedule.countDocuments({ fichaId, activa: true }), 2);
+  assert.ok((await LearnerProfile.findById(learners[0]._id).lean()).fichas.some(
+    (learnerFichaId) => String(learnerFichaId) === String(fichaId)
+  ));
+  const storedFicha = await Ficha.collection.findOne({ _id: new mongoose.Types.ObjectId(fichaId) });
+  assert.equal(Object.hasOwn(storedFicha, 'sesiones'), false);
+  assert.equal(Object.hasOwn(storedFicha, 'aprendices'), false);
 
   const overlappingFichaUpdate = await request(`/api/management/fichas/${fichaId}`, {
     token: coordinatorToken,
@@ -162,6 +207,17 @@ test('role dashboards and anonymous evaluation flow work with isolated MongoDB',
   assert.equal(overlappingFichaUpdate.response.status, 400);
 
   const instructorToken = await login('instructor@example.com', 'instructor');
+  const noticeResult = await request(`/api/management/fichas/${fichaId}/novedades`, {
+    token: instructorToken,
+    method: 'POST',
+    body: JSON.stringify({
+      tipo: 'general',
+      mensaje: 'La próxima sesión iniciará con una actividad de repaso.',
+      fechaClase: '2026-09-07',
+    }),
+  });
+  assert.equal(noticeResult.response.status, 201, noticeResult.body.message);
+  assert.equal(await Announcement.countDocuments({ fichaId }), 1);
   const instructorFichas = await request('/api/management/instructor/fichas', {
     token: instructorToken,
   });
@@ -186,6 +242,24 @@ test('role dashboards and anonymous evaluation flow work with isolated MongoDB',
   });
   assert.equal(firstSchedule.response.status, 200);
   assert.equal(firstSchedule.body.data[0].yaEvaluo, false);
+  assert.equal(firstSchedule.body.data[0].novedades.length, 1);
+  const rubricResponse = await request('/api/evaluations/rubric', {
+    token: learnerTokens[0],
+  });
+  assert.equal(rubricResponse.response.status, 200);
+  assert.equal(rubricResponse.body.data.flatMap((category) => category.questions).length, 8);
+
+  const incompleteEvaluation = await request('/api/evaluations', {
+    token: learnerTokens[0],
+    method: 'POST',
+    body: JSON.stringify({
+      instructorId,
+      fichaId,
+      respuestas: answersForEvaluation().slice(1),
+      comentario: 'Evaluación incompleta de prueba.',
+    }),
+  });
+  assert.equal(incompleteEvaluation.response.status, 400);
 
   const firstEvaluation = await request('/api/evaluations', {
     token: learnerTokens[0],
@@ -193,8 +267,7 @@ test('role dashboards and anonymous evaluation flow work with isolated MongoDB',
     body: JSON.stringify({
       instructorId,
       fichaId,
-      calificacionMetodologia: 4,
-      calificacionTecnica: 5,
+      respuestas: answersForEvaluation(),
       comentario: 'Explica con claridad y resuelve las dudas del grupo.',
     }),
   });
@@ -206,8 +279,7 @@ test('role dashboards and anonymous evaluation flow work with isolated MongoDB',
     body: JSON.stringify({
       instructorId,
       fichaId,
-      calificacionMetodologia: 4,
-      calificacionTecnica: 5,
+      respuestas: answersForEvaluation(),
       comentario: 'Intento duplicado de evaluación.',
     }),
   });
@@ -226,8 +298,7 @@ test('role dashboards and anonymous evaluation flow work with isolated MongoDB',
       body: JSON.stringify({
         instructorId,
         fichaId,
-        calificacionMetodologia: 4,
-        calificacionTecnica: 5,
+        respuestas: answersForEvaluation(),
         comentario: `Retroalimentación constructiva del aprendiz número ${index + 1}.`,
       }),
     });
@@ -236,6 +307,10 @@ test('role dashboards and anonymous evaluation flow work with isolated MongoDB',
 
   const savedEvaluation = await Evaluation.findOne({ instructorId }).lean();
   assert.equal(Object.hasOwn(savedEvaluation, 'learnerId'), false);
+  assert.equal(
+    await EvaluationAnswer.countDocuments({ evaluationId: savedEvaluation._id }),
+    8
+  );
 
   const learnerScheduleAfterThreshold = await request('/api/management/learner/schedule', {
     token: learnerTokens[0],
@@ -249,13 +324,57 @@ test('role dashboards and anonymous evaluation flow work with isolated MongoDB',
   assert.equal(consolidated.length, 1);
   assert.equal(consolidated[0].totalEvaluaciones, 5);
   assert.equal(consolidated[0].comentarios.length, 5);
+  assert.deepEqual(consolidated[0].promediosPorCategoria, {
+    pedagogicas: 4.33,
+    comunicativas: 4,
+    compromiso: 4,
+  });
+  assert.equal(consolidated[0].promedioGeneral, 4.13);
+  const reportData = await getInstructorReportData(instructorId);
+  assert.equal(reportData.totalEvaluaciones, 5);
+  assert.equal(reportData.promedioGeneral, 4.13);
+  assert.deepEqual(reportData.promediosPorCategoria, {
+    pedagogicas: 4.33,
+    comunicativas: 4,
+    compromiso: 4,
+  });
+  assert.equal(reportData.groups[0].comentarios.length, 5);
+  assert.equal(Object.hasOwn(reportData.groups[0], 'learnerId'), false);
+
+  const unauthenticatedReport = await request('/api/instructors/me/report.pdf');
+  assert.equal(unauthenticatedReport.response.status, 401);
+  const learnerReport = await request('/api/instructors/me/report.pdf', {
+    token: learnerTokens[0],
+  });
+  assert.equal(learnerReport.response.status, 403);
+  const reportResponse = await fetch(`${baseUrl}/api/instructors/me/report.pdf`, {
+    headers: { Authorization: 'Bearer ' + instructorToken },
+  });
+  assert.equal(reportResponse.status, 200);
+  assert.match(reportResponse.headers.get('content-type'), /application\/pdf/);
+  assert.match(reportResponse.headers.get('content-disposition'), /attachment; filename="informe-retroalimentacion-/);
+  const reportPdf = Buffer.from(await reportResponse.arrayBuffer());
+  assert.equal(reportPdf.subarray(0, 5).toString(), '%PDF-');
+  assert.ok(reportPdf.length > 1000);
 
   const coordinatorMetrics = await request('/api/instructors/metrics/summary', {
     token: coordinatorToken,
   });
   assert.equal(coordinatorMetrics.response.status, 200);
   assert.equal(coordinatorMetrics.body.data.totalEvaluaciones, 5);
-  assert.equal(coordinatorMetrics.body.data.promedioGlobal, 4.5);
+  assert.equal(coordinatorMetrics.body.data.promedioGlobal, 4.13);
+
+  const coordinatorEvaluation = await request('/api/evaluations', {
+    token: coordinatorToken,
+    method: 'POST',
+    body: JSON.stringify({
+      instructorId,
+      fichaId,
+      respuestas: answersForEvaluation(),
+      comentario: 'Coordinación no debe responder esta evaluación.',
+    }),
+  });
+  assert.equal(coordinatorEvaluation.response.status, 403);
 
   const forbiddenLearnerList = await request('/api/management/users', {
     token: learnerTokens[0],
@@ -371,6 +490,9 @@ test('role dashboards and anonymous evaluation flow work with isolated MongoDB',
   assert.equal(imported.body.data.credentials.length, 3);
   assert.ok(imported.body.data.credentials.every((credential) => credential.password.length >= 12));
   assert.equal(imported.body.data.coordinator.nombre, 'Coordinación Importada');
+  const coordinatorProfileAfterImport = await CoordinatorProfile.findById(coordinator._id).lean();
+  assert.equal(coordinatorProfileAfterImport.nombre, 'Coordinación Importada');
+  assert.equal(coordinatorProfileAfterImport.email, 'coordinacion@example.com');
   const importedInstructorTokens = await Promise.all(
     imported.body.data.credentials
       .filter((credential) => credential.rol === 'instructor')
@@ -399,8 +521,7 @@ test('role dashboards and anonymous evaluation flow work with isolated MongoDB',
       body: JSON.stringify({
         instructorId,
         fichaId: importedFichaId,
-        calificacionMetodologia: 4,
-        calificacionTecnica: 5,
+        respuestas: answersForEvaluation(),
         comentario: 'Evaluación de prueba para el bloque asignado.',
       }),
     });
@@ -412,8 +533,7 @@ test('role dashboards and anonymous evaluation flow work with isolated MongoDB',
     body: JSON.stringify({
       instructorId: instructorIds[0],
       fichaId: importedFichaId,
-      calificacionMetodologia: 4,
-      calificacionTecnica: 5,
+      respuestas: answersForEvaluation(),
       comentario: 'Segundo intento de evaluación duplicada.',
     }),
   });
@@ -448,7 +568,7 @@ test('role dashboards and anonymous evaluation flow work with isolated MongoDB',
   );
 
   const resetTokenRecord = await PasswordResetToken.findOne({
-    userId: (await User.findOne({ email: 'coordinacion@example.com' }))._id,
+    userId: (await CoordinatorProfile.findOne({ email: 'coordinacion@example.com' }))._id,
   }).lean();
   assert.equal(resetTokenRecord.tokenHash.length, 64);
   assert.notEqual(resetTokenRecord.tokenHash, activeResetToken);
@@ -501,9 +621,11 @@ test('role dashboards and anonymous evaluation flow work with isolated MongoDB',
   assert.ok(newCoordinatorToken);
 
   const expiredRawToken = 'a'.repeat(64);
-  const coordinator = await User.findOne({ email: 'coordinacion@example.com' });
+  const coordinatorAfterReset = await CoordinatorProfile.findOne({
+    email: 'coordinacion@example.com',
+  }).select('+password +authVersion');
   await PasswordResetToken.create({
-    userId: coordinator._id,
+    userId: coordinatorAfterReset._id,
     tokenHash: createHash('sha256').update(expiredRawToken).digest('hex'),
     expiresAt: new Date(Date.now() - 1000),
   });
@@ -512,4 +634,18 @@ test('role dashboards and anonymous evaluation flow work with isolated MongoDB',
     body: JSON.stringify({ token: expiredRawToken, password: newPassword }),
   });
   assert.equal(expiredResult.response.status, 400);
+
+  const profileUpdateResult = await request(`/api/management/users/${instructorId}`, {
+    token: newCoordinatorToken,
+    method: 'PATCH',
+    body: JSON.stringify({
+      nombre: 'Instructor de Prueba Actualizado',
+      email: 'instructor.actualizado@example.com',
+    }),
+  });
+  assert.equal(profileUpdateResult.response.status, 200, profileUpdateResult.body.message);
+  const updatedInstructorProfile = await InstructorProfile.findById(instructorId).lean();
+  assert.equal(updatedInstructorProfile.nombre, 'Instructor de Prueba Actualizado');
+  assert.equal(updatedInstructorProfile.email, 'instructor.actualizado@example.com');
+  assert.ok(await login('instructor.actualizado@example.com', 'instructor'));
 });

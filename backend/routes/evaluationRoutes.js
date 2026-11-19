@@ -11,6 +11,12 @@ router.post(
   evaluationController.createEvaluation
 );
 router.get(
+  '/rubric',
+  protect,
+  authorize('aprendiz'),
+  evaluationController.getRubric
+);
+router.get(
   '/recent',
   protect,
   authorize('coordinador'),

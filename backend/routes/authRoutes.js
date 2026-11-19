@@ -3,12 +3,13 @@ const router = express.Router();
 const authController = require('../controllers/authController');
 const { protect } = require('../middlewares/authMiddleware');
 const {
+  loginRateLimit,
   passwordResetConfirmLimit,
   passwordResetRequestLimit,
 } = require('../middlewares/passwordResetRateLimit');
 
 // Mapeo de rutas de autenticación
-router.post('/login', authController.login);
+router.post('/login', loginRateLimit, authController.login);
 router.post('/password-reset', passwordResetRequestLimit, authController.requestPasswordReset);
 router.post(
   '/password-reset/confirm',

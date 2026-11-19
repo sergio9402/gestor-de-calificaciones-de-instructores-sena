@@ -1,19 +1,17 @@
 import { apiRequest } from './apiClient';
 
-export async function submitEvaluation({
-  instructorId,
-  fichaId,
-  methodology,
-  technicalDomain,
-  comment,
-}) {
+export async function getEvaluationRubric() {
+  const response = await apiRequest('/evaluations/rubric');
+  return response.data;
+}
+
+export async function submitEvaluation({ instructorId, fichaId, answers, comment }) {
   const response = await apiRequest('/evaluations', {
     method: 'POST',
     body: JSON.stringify({
       instructorId,
       fichaId,
-      calificacionMetodologia: methodology,
-      calificacionTecnica: technicalDomain,
+      respuestas: answers,
       comentario: comment,
     }),
   });

@@ -1,12 +1,13 @@
 const nodemailer = require('nodemailer');
 
 function getEmailConfig() {
+  const host = process.env.SMTP_HOST?.trim();
   const port = Number(process.env.SMTP_PORT || 587);
   const secure = process.env.SMTP_SECURE === 'true' || port === 465;
   const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
 
   if (
-    !process.env.SMTP_HOST ||
+    !host ||
     !Number.isInteger(port) ||
     port < 1 ||
     port > 65535 ||
@@ -40,11 +41,13 @@ function getEmailConfig() {
   }
 
   return {
-    host: process.env.SMTP_HOST,
+    host,
     port,
     secure,
     user: process.env.SMTP_USER,
-    password: process.env.SMTP_PASS,
+    password: host.toLowerCase() === 'smtp.gmail.com'
+      ? process.env.SMTP_PASS.replace(/\s/g, '')
+      : process.env.SMTP_PASS,
     from: process.env.SMTP_FROM,
     frontendUrl: parsedFrontendUrl.toString().replace(/\/$/, ''),
   };
@@ -91,7 +94,10 @@ async function sendPasswordResetEmail(email, token) {
     });
   } catch (error) {
     console.error('[Email service] No se pudo enviar el correo de recuperación:', error.code || 'SMTP_ERROR');
-    const deliveryError = new Error('No fue posible enviar el correo de recuperación. Intenta de nuevo más tarde.');
+    const message = error.code === 'EAUTH' && config.host.toLowerCase() === 'smtp.gmail.com'
+      ? 'Gmail rechazó la autenticación. Verifica SMTP_USER y usa una contraseña de aplicación válida.'
+      : 'No fue posible enviar el correo de recuperación. Intenta de nuevo más tarde.';
+    const deliveryError = new Error(message);
     deliveryError.statusCode = 503;
     throw deliveryError;
   } finally {

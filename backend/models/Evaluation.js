@@ -4,7 +4,7 @@ const evaluationSchema = new mongoose.Schema(
   {
     instructorId: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: 'User',
+      ref: 'InstructorProfile',
       required: [true, 'El ID del instructor a evaluar es obligatorio'],
       index: true,
     },
@@ -13,20 +13,28 @@ const evaluationSchema = new mongoose.Schema(
       ref: 'Ficha',
       index: true,
     },
+    periodoId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Period',
+      index: true,
+    },
     periodo: {
       type: String,
       trim: true,
       maxlength: 30,
     },
+    rubricVersion: {
+      type: Number,
+      default: 1,
+      min: 1,
+    },
     calificacionMetodologia: {
       type: Number,
-      required: [true, 'La calificación de metodología es obligatoria'],
       min: [1, 'La calificación mínima en metodología es 1'],
       max: [5, 'La calificación máxima en metodología es 5'],
     },
     calificacionTecnica: {
       type: Number,
-      required: [true, 'La calificación de dominio técnico es obligatoria'],
       min: [1, 'La calificación mínima en dominio técnico es 1'],
       max: [5, 'La calificación máxima en dominio técnico es 5'],
     },
@@ -58,11 +66,15 @@ const evaluationSchema = new mongoose.Schema(
 );
 
 // Pre-save hook para calcular el promedio de la evaluación individual
-evaluationSchema.pre('save', function (next) {
-  this.promedio = Number(
-    ((this.calificacionMetodologia + this.calificacionTecnica) / 2).toFixed(2)
-  );
-  next();
+evaluationSchema.pre('save', function calculateLegacyAverage() {
+  if (
+    Number.isFinite(this.calificacionMetodologia) &&
+    Number.isFinite(this.calificacionTecnica)
+  ) {
+    this.promedio = Number(
+      ((this.calificacionMetodologia + this.calificacionTecnica) / 2).toFixed(2)
+    );
+  }
 });
 
 module.exports = mongoose.model('Evaluation', evaluationSchema);

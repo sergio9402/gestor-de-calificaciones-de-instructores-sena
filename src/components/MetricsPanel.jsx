@@ -22,17 +22,29 @@ export default function MetricsPanel({
     ? (instructors.reduce((acc, curr) => acc + Number(curr.promedioGeneral || 0), 0) / instructors.length).toFixed(2)
     : '0.00';
 
-  const avgMethodology = metrics?.promedioMetodologia !== undefined
-    ? Number(metrics.promedioMetodologia).toFixed(2)
-    : instructors.length > 0
-    ? (instructors.reduce((acc, curr) => acc + Number(curr.promedioMetodologia || 0), 0) / instructors.length).toFixed(2)
-    : '0.00';
-
-  const avgTechnical = metrics?.promedioTecnico !== undefined
-    ? Number(metrics.promedioTecnico).toFixed(2)
-    : instructors.length > 0
-    ? (instructors.reduce((acc, curr) => acc + Number(curr.promedioTecnico || 0), 0) / instructors.length).toFixed(2)
-    : '0.00';
+  const averageCategory = (categoryCode) => {
+    const institutionalValue = metrics?.promediosPorCategoria?.[categoryCode];
+    if (Number.isFinite(institutionalValue)) return institutionalValue.toFixed(2);
+    const eligibleInstructors = instructors.filter(
+      (instructor) =>
+        (instructor.totalEvaluaciones || 0) >= 5 &&
+        Number.isFinite(instructor.promediosPorCategoria?.[categoryCode])
+    );
+    const responseCount = eligibleInstructors.reduce(
+      (total, instructor) => total + instructor.totalEvaluaciones,
+      0
+    );
+    if (!responseCount) return '0.00';
+    const weightedAverage = eligibleInstructors.reduce(
+      (total, instructor) =>
+        total + instructor.promediosPorCategoria[categoryCode] * instructor.totalEvaluaciones,
+      0
+    ) / responseCount;
+    return weightedAverage.toFixed(2);
+  };
+  const avgPedagogical = averageCategory('pedagogicas');
+  const avgCommunication = averageCategory('comunicativas');
+  const avgCommitment = averageCategory('compromiso');
 
   // Filter & Sort
   const filteredInstructors = instructors
@@ -65,13 +77,13 @@ export default function MetricsPanel({
             Panel de Desempeño & Métricas de Formación
           </h2>
           <p className="text-slate-200 text-sm mt-2 leading-relaxed">
-            Resumen de desempeño docente según las evaluaciones registradas de metodología y dominio técnico.
+            Resumen de desempeño docente según los ocho criterios de la rúbrica vigente.
           </p>
         </div>
       </div>
 
       {/* KPI Cards Grid Actualizados en Vivo */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
         {/* Card 1: Promedio Institucional */}
         <div className="bg-white p-5 rounded-2xl border border-slate-200/90 shadow-sm flex items-center justify-between">
           <div>
@@ -89,16 +101,16 @@ export default function MetricsPanel({
           </div>
         </div>
 
-        {/* Card 2: Metodología Promedio */}
+        {/* Card 2: Pedagógicas y didácticas */}
         <div className="bg-white p-5 rounded-2xl border border-slate-200/90 shadow-sm flex items-center justify-between">
           <div>
-            <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Metodología Pedagógica</span>
+            <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Pedagógicas y didácticas</span>
             <div className="flex items-baseline gap-2 mt-1">
-              <span className="text-3xl font-extrabold text-[#39A900]">{avgMethodology}</span>
+              <span className="text-3xl font-extrabold text-[#39A900]">{avgPedagogical}</span>
               <span className="text-xs font-medium text-slate-400">/ 5.0</span>
             </div>
             <span className="inline-block mt-2 text-[11px] font-semibold text-slate-600 bg-slate-100 px-2 py-0.5 rounded-md">
-              Estrategia y Dinamismo
+              3 criterios
             </span>
           </div>
           <div className="w-12 h-12 bg-[#39A900]/10 rounded-2xl flex items-center justify-center text-[#39A900] border border-[#39A900]/20">
@@ -106,16 +118,16 @@ export default function MetricsPanel({
           </div>
         </div>
 
-        {/* Card 3: Dominio Técnico Promedio */}
+        {/* Card 3: Comunicativas y relacionales */}
         <div className="bg-white p-5 rounded-2xl border border-slate-200/90 shadow-sm flex items-center justify-between">
           <div>
-            <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Dominio Técnico</span>
+            <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Comunicativas y relacionales</span>
             <div className="flex items-baseline gap-2 mt-1">
-              <span className="text-3xl font-extrabold text-[#00324D]">{avgTechnical}</span>
+              <span className="text-3xl font-extrabold text-[#00324D]">{avgCommunication}</span>
               <span className="text-xs font-medium text-slate-400">/ 5.0</span>
             </div>
             <span className="inline-block mt-2 text-[11px] font-semibold text-slate-600 bg-slate-100 px-2 py-0.5 rounded-md">
-              Habilidades Prácticas
+              3 criterios
             </span>
           </div>
           <div className="w-12 h-12 bg-sky-50 rounded-2xl flex items-center justify-center text-sky-600 border border-sky-100">
@@ -123,7 +135,24 @@ export default function MetricsPanel({
           </div>
         </div>
 
-        {/* Card 4: Total Evaluaciones */}
+        {/* Card 4: Compromiso y cumplimiento */}
+        <div className="bg-white p-5 rounded-2xl border border-slate-200/90 shadow-sm flex items-center justify-between">
+          <div>
+            <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Compromiso y cumplimiento</span>
+            <div className="flex items-baseline gap-2 mt-1">
+              <span className="text-3xl font-extrabold text-violet-700">{avgCommitment}</span>
+              <span className="text-xs font-medium text-slate-400">/ 5.0</span>
+            </div>
+            <span className="inline-block mt-2 text-[11px] font-semibold text-slate-600 bg-slate-100 px-2 py-0.5 rounded-md">
+              2 criterios
+            </span>
+          </div>
+          <div className="w-12 h-12 bg-violet-50 rounded-2xl flex items-center justify-center text-violet-600 border border-violet-100">
+            <CheckCircle2 className="w-6 h-6" />
+          </div>
+        </div>
+
+        {/* Card 5: Total Evaluaciones */}
         <div className="bg-white p-5 rounded-2xl border border-slate-200/90 shadow-sm flex items-center justify-between">
           <div>
             <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Evaluaciones Recibidas</span>
@@ -195,13 +224,11 @@ export default function MetricsPanel({
           {filteredInstructors.map((inst, index) => {
             const hasEvaluations = inst.totalEvaluaciones > 0;
             const instRating = hasEvaluations ? Number(inst.promedioGeneral || 0) : 0;
-            const instMethodology = hasEvaluations ? Number(inst.promedioMetodologia || 0) : 0;
-            const instTechnical = hasEvaluations ? Number(inst.promedioTecnico || 0) : 0;
+            const categoryScores = hasEvaluations && inst.totalEvaluaciones >= 5
+              ? inst.promediosPorCategoria || {}
+              : {};
             const instName = inst.name || inst.nombre || '';
             const instModule = inst.module || inst.especialidad || '';
-
-            const methodologyPercent = Math.min(100, (instMethodology / 5) * 100);
-            const technicalPercent = Math.min(100, (instTechnical / 5) * 100);
 
             return (
               <div 
@@ -246,39 +273,29 @@ export default function MetricsPanel({
                   </div>
                 </div>
 
-                {/* Comparative Double Bars */}
+                {/* Category score bars */}
                 <div className="space-y-2 mt-2">
-                  {/* Metodología Bar */}
-                  <div>
-                    <div className="flex justify-between text-xs font-medium text-slate-600 mb-1">
-                      <span className="flex items-center gap-1">
-                        <span className="w-2 h-2 rounded-full bg-[#39A900]"></span> Metodología
-                      </span>
-                      <span className="font-bold text-slate-800">{hasEvaluations ? `${instMethodology.toFixed(1)} / 5.0` : '—'}</span>
-                    </div>
-                    <div className="w-full bg-slate-200/70 rounded-full h-3 overflow-hidden">
-                      <div
-                        className="bg-gradient-to-r from-[#39A900] to-emerald-400 h-3 rounded-full transition-all duration-700 ease-out"
-                        style={{ width: `${methodologyPercent}%` }}
-                      ></div>
-                    </div>
-                  </div>
-
-                  {/* Dominio Técnico Bar */}
-                  <div>
-                    <div className="flex justify-between text-xs font-medium text-slate-600 mb-1">
-                      <span className="flex items-center gap-1">
-                        <span className="w-2 h-2 rounded-full bg-[#00324D]"></span> Dominio Técnico
-                      </span>
-                      <span className="font-bold text-slate-800">{hasEvaluations ? `${instTechnical.toFixed(1)} / 5.0` : '—'}</span>
-                    </div>
-                    <div className="w-full bg-slate-200/70 rounded-full h-3 overflow-hidden">
-                      <div
-                        className="bg-gradient-to-r from-[#00324D] to-cyan-700 h-3 rounded-full transition-all duration-700 ease-out"
-                        style={{ width: `${technicalPercent}%` }}
-                      ></div>
-                    </div>
-                  </div>
+                  {[
+                    ['pedagogicas', 'Pedagógicas y didácticas', 'bg-[#39A900]'],
+                    ['comunicativas', 'Comunicativas y relacionales', 'bg-[#00324D]'],
+                    ['compromiso', 'Compromiso y cumplimiento', 'bg-violet-600'],
+                  ].map(([code, label, barColor]) => {
+                    const score = categoryScores[code];
+                    const percent = Number.isFinite(score) ? Math.min(100, (score / 5) * 100) : 0;
+                    return (
+                      <div key={code}>
+                        <div className="flex justify-between text-xs font-medium text-slate-600 mb-1">
+                          <span>{label}</span>
+                          <span className="font-bold text-slate-800">
+                            {Number.isFinite(score) ? `${score.toFixed(1)} / 5.0` : '—'}
+                          </span>
+                        </div>
+                        <div className="w-full bg-slate-200/70 rounded-full h-3 overflow-hidden">
+                          <div className={`${barColor} h-3 rounded-full transition-all duration-700 ease-out`} style={{ width: `${percent}%` }} />
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             );

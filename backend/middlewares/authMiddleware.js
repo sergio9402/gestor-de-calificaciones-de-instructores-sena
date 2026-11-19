@@ -1,5 +1,5 @@
 const jwt = require('jsonwebtoken');
-const User = require('../models/User');
+const { getProfileModel, sanitizeUserProfile } = require('../services/userProfileService');
 const { getJwtSecret } = require('../config/jwt');
 
 const protect = async (req, res, next) => {
@@ -23,24 +23,25 @@ const protect = async (req, res, next) => {
   }
 
   try {
-    const user = await User.findOne({
+    const Profile = getProfileModel(decoded.rol);
+    const profile = await Profile.findOne({
       _id: decoded.id,
       activo: { $ne: false },
-    }).select('-password +authVersion');
-    if (!user) {
+    }).select('+authVersion');
+    if (!profile) {
       return res.status(401).json({
         success: false,
-        message: 'La cuenta asociada al token ya no existe.',
+        message: 'El perfil asociado al token ya no existe o está inactivo.',
       });
     }
-    if ((decoded.authVersion || 0) !== (user.authVersion || 0)) {
+    if ((decoded.authVersion || 0) !== (profile.authVersion || 0)) {
       return res.status(401).json({
         success: false,
         message: 'La sesión ya no es válida. Inicia sesión nuevamente.',
       });
     }
 
-    req.user = user;
+    req.user = sanitizeUserProfile(profile);
     return next();
   } catch (error) {
     return next(error);

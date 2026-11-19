@@ -12,6 +12,12 @@ router.get(
   instructorController.getMetricsSummary
 );
 router.get(
+  '/me/report.pdf',
+  protect,
+  authorize('instructor'),
+  instructorController.downloadMyReport
+);
+router.get(
   '/:id',
   protect,
   authorize('coordinador', 'instructor'),

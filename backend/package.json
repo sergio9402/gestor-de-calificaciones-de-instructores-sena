@@ -2,13 +2,23 @@
   "name": "sistema-evaluacion-sena-backend",
   "version": "1.0.0",
   "description": "API Backend para el Sistema de Evaluación de Instructores SENA",
+  "license": "MIT",
+  "engines": {
+    "node": ">=18.0.0"
+  },
   "main": "server.js",
   "type": "commonjs",
   "scripts": {
     "start": "node server.js",
     "dev": "node --watch server.js",
     "seed": "node config/seed.js --run",
+    "coordinator:bootstrap": "node config/provisionCoordinator.js --run",
     "migrate:participation": "node config/migrateEvaluationParticipation.js --run",
+    "migrate:roles": "node config/migrateRoleCollections.js --run",
+    "migrate:roles:drop-legacy": "node config/migrateRoleCollections.js --run --delete-legacy",
+    "migrate:accounts": "node config/migrateAccountsIntoProfiles.js --run",
+    "migrate:accounts:drop": "node config/migrateAccountsIntoProfiles.js --run --drop-accounts",
+    "migrate:academic": "node config/migrateAcademicCollections.js --run",
     "test": "node --test"
   },
   "dependencies": {
@@ -18,7 +28,8 @@
     "express-rate-limit": "^8.7.3",
     "jsonwebtoken": "^9.0.3",
     "mongoose": "^8.4.4",
-    "nodemailer": "^10.4.0"
+    "nodemailer": "^10.4.0",
+    "pdfkit": "^0.20.2"
   },
   "devDependencies": {
     "mongodb-memory-server": "^10.1.4"

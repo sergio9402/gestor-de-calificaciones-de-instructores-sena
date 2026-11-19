@@ -9,10 +9,14 @@ try {
   // Ignorar si el entorno bloquea la reasignación
 }
 
-const User = require('../models/User');
+const CoordinatorProfile = require('../models/CoordinatorProfile');
+const InstructorProfile = require('../models/InstructorProfile');
+const LearnerProfile = require('../models/LearnerProfile');
+const EvaluationParticipation = require('../models/EvaluationParticipation');
 const Evaluation = require('../models/Evaluation');
+const EvaluationAnswer = require('../models/EvaluationAnswer');
 const connectDB = require('./db');
-const { hashPassword } = require('../utils/password');
+const { createUserProfile } = require('../services/userProfileService');
 
 dotenv.config();
 
@@ -98,20 +102,59 @@ const seedData = async () => {
   }
 
   await connectDB();
-  if (await User.exists({}) || await Evaluation.exists({})) {
+  if (
+    await CoordinatorProfile.exists({}) ||
+    await InstructorProfile.exists({}) ||
+    await LearnerProfile.exists({}) ||
+    await Evaluation.exists({}) ||
+    await EvaluationAnswer.exists({}) ||
+    await EvaluationParticipation.exists({})
+  ) {
     throw new Error(
       'La base de datos no está vacía. El seed se canceló para preservar los datos existentes.'
     );
   }
 
   console.log('[Seed] Insertando usuarios de demostración...');
-  const usersWithHashedPasswords = await Promise.all(
-    seedInstructors.map(async (instructor) => ({
-      ...instructor,
-      password: await hashPassword(process.env.DEMO_INITIAL_PASSWORD),
-    }))
-  );
-  const createdUsers = await User.create(usersWithHashedPasswords);
+  const createdUsers = [];
+  for (const user of seedInstructors) {
+    const {
+      nombre,
+      email,
+      rol,
+      especialidad,
+      centro,
+      avatar,
+      fichasAsignadas,
+      estado,
+      horario,
+      promedioGeneral,
+      promedioMetodologia,
+      promedioTecnico,
+      totalEvaluaciones,
+    } = user;
+    const profileData = rol === 'instructor'
+      ? {
+        especialidad,
+        centro,
+        avatar,
+        fichasAsignadas,
+        estado,
+        horario,
+        promedioGeneral,
+        promedioMetodologia,
+        promedioTecnico,
+        totalEvaluaciones,
+      }
+      : { centro, area: especialidad };
+    createdUsers.push(await createUserProfile({
+      nombre,
+      email,
+      rol,
+      password: process.env.DEMO_INITIAL_PASSWORD,
+      activo: true,
+    }, profileData));
+  }
 
   const carlosInstructor = createdUsers.find(
     (user) => user.email === 'carlos.mendoza@sena.edu.co'
@@ -120,12 +163,14 @@ const seedData = async () => {
     await Evaluation.create([
       {
         instructorId: carlosInstructor._id,
+        rubricVersion: 1,
         calificacionMetodologia: 5,
         calificacionTecnica: 5,
         comentario: 'Excelente dominio de Node.js y arquitecturas limpias.',
       },
       {
         instructorId: carlosInstructor._id,
+        rubricVersion: 1,
         calificacionMetodologia: 4,
         calificacionTecnica: 5,
         comentario: 'Muy buena pedagogía en las sesiones de asesoría técnica.',

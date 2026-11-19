@@ -1,7 +1,12 @@
 const crypto = require('node:crypto');
 const Ficha = require('../models/Ficha');
-const User = require('../models/User');
+const InstructorProfile = require('../models/InstructorProfile');
+const LearnerProfile = require('../models/LearnerProfile');
+const Enrollment = require('../models/Enrollment');
+const Schedule = require('../models/Schedule');
+const CoordinatorProfile = require('../models/CoordinatorProfile');
 const managementService = require('./managementService');
+const { createUserProfile } = require('./userProfileService');
 
 const DAYS = new Set(['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo']);
 const httpError = (statusCode, message) =>
@@ -130,16 +135,19 @@ class TestImportService {
     }
     const emails = [...validation.instructors, ...validation.learners]
       .map((user) => String(user.email).trim().toLowerCase());
-    const [existingUsers, existingFicha] = await Promise.all([
-      User.find({ email: { $in: emails } }).select('email').lean(),
+    const [existingInstructors, existingLearners, existingCoordinators, existingFicha] = await Promise.all([
+      InstructorProfile.find({ email: { $in: emails } }).select('email').lean(),
+      LearnerProfile.find({ email: { $in: emails } }).select('email').lean(),
+      CoordinatorProfile.find({ email: { $in: emails } }).select('email').lean(),
       Ficha.exists({ codigo: validation.ficha.codigo.trim() }),
     ]);
     const errors = [];
+    const existingUsers = [...existingInstructors, ...existingLearners, ...existingCoordinators];
     if (existingUsers.length) {
       errors.push(`Ya existen cuentas con estos correos: ${existingUsers.map((user) => user.email).join(', ')}.`);
     }
     if (existingFicha) errors.push(`La ficha ${validation.ficha.codigo} ya existe.`);
-    const existingDocuments = await User.find({
+    const existingDocuments = await LearnerProfile.find({
       $or: validation.learners.map((learner) => ({
         tipoDocumento: learner.tipoDocumento,
         documento: String(learner.documento),
@@ -174,14 +182,15 @@ class TestImportService {
     try {
       for (const instructor of input.instructors) {
         const password = crypto.randomBytes(18).toString('base64url');
-        const user = await User.create({
+        const user = await createUserProfile({
           nombre: instructor.nombre.trim(),
           email: instructor.email.trim().toLowerCase(),
           password,
           rol: 'instructor',
+          activo: true,
+        }, {
           especialidad: instructor.especialidad || 'Formación profesional integral',
           centro: instructor.centro || 'Centro de Formación SENA',
-          activo: true,
         });
         createdUserIds.push(user._id);
         instructorByEmail.set(user.email, { user, password });
@@ -190,14 +199,15 @@ class TestImportService {
       const learnerByEmail = new Map();
       for (const learner of input.learners) {
         const password = crypto.randomBytes(18).toString('base64url');
-        const user = await User.create({
+        const user = await createUserProfile({
           nombre: learner.nombre.trim(),
           email: learner.email.trim().toLowerCase(),
           password,
           rol: 'aprendiz',
+          activo: true,
+        }, {
           tipoDocumento: learner.tipoDocumento,
           documento: String(learner.documento),
-          activo: true,
         });
         createdUserIds.push(user._id);
         learnerByEmail.set(user.email, { user, password });
@@ -214,7 +224,7 @@ class TestImportService {
       const primaryInstructor = instructorByEmail.get(
         input.ficha.sesiones[0].instructorEmail.trim().toLowerCase()
       ).user;
-      const ficha = await Ficha.create({
+      const createdFicha = await managementService.createFicha({
         codigo: input.ficha.codigo.trim(),
         programa: input.ficha.programa.trim(),
         periodo: input.ficha.periodo.trim(),
@@ -228,14 +238,14 @@ class TestImportService {
         sesiones: sessions,
         aprendices: [...learnerByEmail.values()].map(({ user }) => user._id),
       });
-      createdFichaId = ficha._id;
-      await managementService.syncInstructorFicha(ficha);
-      const coordinator = await User.findOneAndUpdate(
-        { _id: coordinatorId, rol: 'coordinador' },
+      createdFichaId = createdFicha._id;
+      const ficha = { ...createdFicha, sesiones: sessions };
+      const coordinator = await CoordinatorProfile.findOneAndUpdate(
+        { _id: coordinatorId, activo: { $ne: false } },
         { $set: { nombre: input.coordinatorName.trim() } },
         { new: true, runValidators: true }
-      ).select('-password');
-      if (!coordinator) throw httpError(404, 'No se encontró la cuenta de coordinación activa.');
+      ).select('-password -authVersion');
+      if (!coordinator) throw httpError(404, 'No se encontró el perfil de coordinación activo.');
       return {
         ficha,
         coordinator,
@@ -257,8 +267,17 @@ class TestImportService {
     } catch (error) {
       try {
         if (createdFichaId) await Ficha.deleteOne({ _id: createdFichaId });
+        if (createdFichaId) {
+          await Promise.all([
+            Enrollment.deleteMany({ fichaId: createdFichaId }),
+            Schedule.deleteMany({ fichaId: createdFichaId }),
+          ]);
+        }
         if (createdUserIds.length) {
-          await User.deleteMany({ _id: { $in: createdUserIds } });
+          await Promise.all([
+            InstructorProfile.deleteMany({ _id: { $in: createdUserIds } }),
+            LearnerProfile.deleteMany({ _id: { $in: createdUserIds } }),
+          ]);
         }
       } catch (rollbackError) {
         const rollbackFailure = httpError(

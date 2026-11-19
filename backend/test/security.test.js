@@ -9,10 +9,17 @@ const evaluationRoutes = require('../routes/evaluationRoutes');
 const instructorRoutes = require('../routes/instructorRoutes');
 const managementRoutes = require('../routes/managementRoutes');
 const Evaluation = require('../models/Evaluation');
+const EvaluationAnswer = require('../models/EvaluationAnswer');
 const EvaluationParticipation = require('../models/EvaluationParticipation');
 const Ficha = require('../models/Ficha');
-const User = require('../models/User');
+const Period = require('../models/Period');
+const Schedule = require('../models/Schedule');
+const Enrollment = require('../models/Enrollment');
+const Announcement = require('../models/Announcement');
+const InstructorProfile = require('../models/InstructorProfile');
+const LearnerProfile = require('../models/LearnerProfile');
 const instructorService = require('../services/instructorService');
+const evaluationService = require('../services/evaluationService');
 const {
   hashPassword,
   isPasswordHash,
@@ -105,6 +112,7 @@ test('management and evaluation routes require role-based authentication', () =>
 
   assertProtected(authRoutes, '/me/:id', 'get');
   assertProtected(instructorRoutes, '/metrics/summary', 'get');
+  assertProtected(instructorRoutes, '/me/report.pdf', 'get');
   assertProtected(instructorRoutes, '/:id/status', 'patch');
   assertProtected(evaluationRoutes, '/recent', 'get');
   assertProtected(evaluationRoutes, '/instructor/:instructorId', 'get');
@@ -135,8 +143,9 @@ test('management and evaluation routes require role-based authentication', () =>
   assert.equal(deniedStatus, 403);
 });
 
-test('evaluation records do not contain learner identity and learner role is supported', () => {
+test('role profiles keep authentication fields in their own collections', () => {
   assert.equal(Evaluation.schema.path('learnerId'), undefined);
+  assert.equal(EvaluationAnswer.schema.path('learnerId'), undefined);
   assert.ok(Evaluation.schema.path('fichaId'));
   assert.equal(EvaluationParticipation.schema.options.timestamps, false);
   assert.deepEqual(
@@ -145,24 +154,57 @@ test('evaluation records do not contain learner identity and learner role is sup
     )[0],
     { learnerId: 1, fichaId: 1, periodo: 1, instructorId: 1 }
   );
-  assert.deepEqual(User.schema.path('rol').enumValues, [
-    'instructor',
-    'coordinador',
-    'aprendiz',
-  ]);
-  assert.ok(Ficha.schema.path('novedades'));
-  assert.ok(Ficha.schema.path('aprendices'));
+  assert.ok(Ficha.schema.path('periodoId'));
+  assert.equal(Ficha.schema.path('novedades'), undefined);
+  assert.equal(Ficha.schema.path('aprendices'), undefined);
+  assert.equal(Ficha.schema.path('sesiones'), undefined);
+  assert.equal(Period.collection.collectionName, 'periodos');
+  assert.equal(Enrollment.collection.collectionName, 'inscripciones');
+  assert.equal(Schedule.collection.collectionName, 'horarios');
+  assert.equal(Announcement.collection.collectionName, 'novedades');
+  assert.equal(InstructorProfile.collection.collectionName, 'instructores');
+  assert.equal(LearnerProfile.collection.collectionName, 'aprendices');
+  assert.equal(require('../models/CoordinatorProfile').collection.collectionName, 'coordinadores');
+  for (const Profile of [
+    InstructorProfile,
+    LearnerProfile,
+    require('../models/CoordinatorProfile'),
+  ]) {
+    assert.ok(Profile.schema.path('password'));
+    assert.equal(Profile.schema.path('password').options.select, false);
+    assert.ok(Profile.schema.path('authVersion'));
+    assert.equal(Profile.schema.path('cuentaId'), undefined);
+  }
+  assert.ok(InstructorProfile.schema.path('nombre'));
+  assert.ok(InstructorProfile.schema.path('email'));
+  assert.ok(InstructorProfile.schema.path('tipoDocumento'));
+  assert.ok(InstructorProfile.schema.path('documento'));
+  assert.ok(LearnerProfile.schema.path('fichas'));
 });
 
-test('ficha schedule must end after it starts', async () => {
-  const ficha = new Ficha({
-    codigo: 'TEST-1',
-    programa: 'Programa prueba',
-    instructor: '507f1f77bcf86cd799439011',
+test('evaluation answers support no-applicable responses without scores', async () => {
+  const answer = new EvaluationAnswer({
+    evaluationId: '507f1f77bcf86cd799439011',
+    criterionCode: 'puntualidad',
+    categoryCode: 'compromiso',
+    score: null,
+    noAplica: true,
+  });
+  await assert.doesNotReject(answer.validate());
+
+  answer.score = 4;
+  await assert.rejects(answer.validate(), /no debe incluir calificación/);
+});
+
+test('normalized schedule must end after it starts', async () => {
+  const schedule = new Schedule({
+    fichaId: '507f1f77bcf86cd799439011',
+    instructor: '507f1f77bcf86cd799439012',
+    dia: 'Lunes',
     horaInicio: '13:00',
     horaFin: '12:00',
   });
-  const error = await ficha.validate().then(
+  const error = await schedule.validate().then(
     () => null,
     (validationError) => validationError
   );
@@ -172,14 +214,17 @@ test('ficha schedule must end after it starts', async () => {
 });
 
 test('institutional metrics use recorded evaluations and a weighted average', async () => {
-  const originalFind = User.find;
-  User.find = () => ({
+  const originalFind = InstructorProfile.find;
+  const originalConsolidated = evaluationService.getConsolidatedEvaluations;
+  InstructorProfile.find = () => ({
+    select() { return this; },
     lean: async () => [
-      { estado: 'Disponible', totalEvaluaciones: 2, promedioGeneral: 4, promedioMetodologia: 3, promedioTecnico: 5 },
-      { estado: 'En Formación', totalEvaluaciones: 1, promedioGeneral: 2, promedioMetodologia: 1, promedioTecnico: 3 },
-      { estado: 'Disponible', totalEvaluaciones: 0, promedioGeneral: 5, promedioMetodologia: 5, promedioTecnico: 5 },
+      { nombre: 'Instructor 1', estado: 'Disponible', totalEvaluaciones: 2, promedioGeneral: 4, promedioMetodologia: 3, promedioTecnico: 5 },
+      { nombre: 'Instructor 2', estado: 'En Formación', totalEvaluaciones: 1, promedioGeneral: 2, promedioMetodologia: 1, promedioTecnico: 3 },
+      { nombre: 'Instructor 3', estado: 'Disponible', totalEvaluaciones: 0, promedioGeneral: 0, promedioMetodologia: 0, promedioTecnico: 0 },
     ],
   });
+  evaluationService.getConsolidatedEvaluations = async () => [];
 
   try {
     const metrics = await instructorService.getInstitutionalMetrics();
@@ -189,7 +234,8 @@ test('institutional metrics use recorded evaluations and a weighted average', as
     assert.equal(metrics.promedioMetodologia, 2.33);
     assert.equal(metrics.promedioTecnico, 4.33);
   } finally {
-    User.find = originalFind;
+    InstructorProfile.find = originalFind;
+    evaluationService.getConsolidatedEvaluations = originalConsolidated;
   }
 });
 

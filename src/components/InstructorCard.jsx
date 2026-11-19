@@ -5,8 +5,7 @@ import StarRating from './StarRating';
 export default function InstructorCard({ instructor, onEvaluate, onSelect, showEvaluate = true }) {
   const evalsCount = instructor.ratingsCount !== undefined ? instructor.ratingsCount : (instructor.totalEvaluaciones || 0);
   const ratingValue = evalsCount ? Number(instructor.promedioGeneral || 0) : 0;
-  const methodologyValue = evalsCount ? Number(instructor.promedioMetodologia || 0) : 0;
-  const technicalValue = evalsCount ? Number(instructor.promedioTecnico || 0) : 0;
+  const categoryScores = evalsCount >= 5 ? instructor.promediosPorCategoria || {} : {};
 
   const instructorName = instructor.name || instructor.nombre || 'Instructor SENA';
   const instructorModule = instructor.module || instructor.especialidad || 'Formación Profesional';
@@ -91,37 +90,31 @@ export default function InstructorCard({ instructor, onEvaluate, onSelect, showE
             </div>
           </div>
 
-          {/* Competency Micro-Bars (Metodología y Dominio Técnico) */}
+          {/* Competency category bars */}
           <div className="mt-4 space-y-2.5">
-            <div>
-              <div className="flex justify-between text-xs font-medium text-slate-700 mb-1">
-                <span className="flex items-center gap-1">
-                  <span className="w-2 h-2 rounded-full bg-[#39A900]"></span> Metodología
-                </span>
-                <span className="font-bold text-slate-800">{evalsCount ? methodologyValue.toFixed(1) : '—'}</span>
-              </div>
-              <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden">
-                <div 
-                  className="bg-gradient-to-r from-[#39A900] to-emerald-400 h-2 rounded-full transition-all duration-500"
-                  style={{ width: `${evalsCount ? Math.min(100, (methodologyValue / 5) * 100) : 0}%` }}
-                ></div>
-              </div>
-            </div>
-
-            <div>
-              <div className="flex justify-between text-xs font-medium text-slate-700 mb-1">
-                <span className="flex items-center gap-1">
-                  <span className="w-2 h-2 rounded-full bg-[#00324D]"></span> Dominio Técnico
-                </span>
-                <span className="font-bold text-slate-800">{evalsCount ? technicalValue.toFixed(1) : '—'}</span>
-              </div>
-              <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden">
-                <div 
-                  className="bg-gradient-to-r from-[#00324D] to-cyan-700 h-2 rounded-full transition-all duration-500"
-                  style={{ width: `${evalsCount ? Math.min(100, (technicalValue / 5) * 100) : 0}%` }}
-                ></div>
-              </div>
-            </div>
+            {[
+              ['pedagogicas', 'Pedagógicas y didácticas', 'bg-[#39A900]'],
+              ['comunicativas', 'Comunicativas y relacionales', 'bg-[#00324D]'],
+              ['compromiso', 'Compromiso y cumplimiento', 'bg-violet-600'],
+            ].map(([code, label, barColor]) => {
+              const score = categoryScores[code];
+              return (
+                <div key={code}>
+                  <div className="flex justify-between text-xs font-medium text-slate-700 mb-1">
+                    <span>{label}</span>
+                    <span className="font-bold text-slate-800">
+                      {Number.isFinite(score) ? score.toFixed(1) : '—'}
+                    </span>
+                  </div>
+                  <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden">
+                    <div
+                      className={`${barColor} h-2 rounded-full transition-all duration-500`}
+                      style={{ width: `${Number.isFinite(score) ? Math.min(100, (score / 5) * 100) : 0}%` }}
+                    />
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </div>
       </div>

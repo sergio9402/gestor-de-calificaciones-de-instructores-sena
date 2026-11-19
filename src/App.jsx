@@ -7,7 +7,7 @@ import LearnerDashboard from './components/LearnerDashboard';
 import InstructorDetailModal from './components/InstructorDetailModal';
 import NotificationToast from './components/NotificationToast';
 import useRoleDashboard from './hooks/useRoleDashboard';
-import { getInstructorProfile } from './services/instructorService';
+import { downloadInstructorReport, getInstructorProfile } from './services/instructorService';
 import { logout } from './services/authService';
 
 function DashboardState({ loading, error, onRetry }) {
@@ -69,6 +69,18 @@ export default function App() {
     }
   };
 
+  const handleDownloadInstructorReport = async () => {
+    const pdf = await downloadInstructorReport();
+    const url = URL.createObjectURL(pdf);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `informe-retroalimentacion-${currentUser._id}.pdf`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+  };
+
   if (!currentUser) {
     return (
       <>
@@ -96,6 +108,7 @@ export default function App() {
             user={currentUser}
             instructor={dashboard.instructor}
             fichas={dashboard.fichas}
+            onDownloadReport={handleDownloadInstructorReport}
             onUpdateStatus={dashboard.changeInstructorStatus}
             onRefresh={dashboard.refresh}
           />

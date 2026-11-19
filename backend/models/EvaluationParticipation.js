@@ -4,7 +4,7 @@ const evaluationParticipationSchema = new mongoose.Schema(
   {
     learnerId: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: 'User',
+      ref: 'LearnerProfile',
       required: true,
     },
     fichaId: {
@@ -14,13 +14,17 @@ const evaluationParticipationSchema = new mongoose.Schema(
     },
     instructorId: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: 'User',
+      ref: 'InstructorProfile',
       required: true,
     },
     periodo: {
       type: String,
       required: true,
       trim: true,
+    },
+    periodoId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Period',
     },
   },
   {

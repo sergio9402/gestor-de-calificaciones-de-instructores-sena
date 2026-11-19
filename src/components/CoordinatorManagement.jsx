@@ -266,7 +266,7 @@ export default function CoordinatorManagement({ onDataChanged, onUserUpdated }) 
                 <option value="aprendiz">Aprendiz</option>
               </select>
             </label>
-            {userForm.rol === 'aprendiz' && (
+            {['aprendiz', 'instructor'].includes(userForm.rol) && (
               <>
                 <label className="text-xs font-bold text-slate-700">Tipo de documento
                   <select className={inputClass} value={userForm.tipoDocumento || 'CC'} onChange={(e) => setUserForm({ ...userForm, tipoDocumento: e.target.value })}>

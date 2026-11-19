@@ -1,10 +1,15 @@
 const evaluationService = require('../services/evaluationService');
 const { asyncHandler } = require('../middlewares/errorHandler');
+const { rubric } = require('../config/evaluationRubric');
 
 /**
  * Controlador Delgado (Slim Controller) para Evaluaciones Anónimas
  */
 class EvaluationController {
+  getRubric = asyncHandler(async (_req, res) => {
+    res.status(200).json({ success: true, data: rubric });
+  });
+
   /**
    * Crea una nueva evaluación anónima y recalcula métricas
    * POST /api/evaluations

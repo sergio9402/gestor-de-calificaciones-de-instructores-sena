@@ -8,13 +8,15 @@ import {
   BookOpen, 
   MessageSquare, 
   ShieldCheck, 
-  Activity
+  Activity,
+  Download,
 } from 'lucide-react';
 
 export default function InstructorDashboard({
   user,
   instructor,
   fichas = [],
+  onDownloadReport,
   onUpdateStatus,
   onRefresh,
 }) {
@@ -27,6 +29,8 @@ export default function InstructorDashboard({
   );
   const [statusError, setStatusError] = useState('');
   const [savingStatus, setSavingStatus] = useState(false);
+  const [downloadingReport, setDownloadingReport] = useState(false);
+  const [reportError, setReportError] = useState('');
 
   // Sincronizar estado local si cambia externamente
   useEffect(() => {
@@ -52,6 +56,18 @@ export default function InstructorDashboard({
     }
   };
 
+  const handleDownloadReport = async () => {
+    setDownloadingReport(true);
+    setReportError('');
+    try {
+      await onDownloadReport();
+    } catch (error) {
+      setReportError(error.message || 'No se pudo descargar el informe.');
+    } finally {
+      setDownloadingReport(false);
+    }
+  };
+
   // Colores según estado operativo
   const getStatusColor = (status) => {
     switch (status) {
@@ -71,9 +87,19 @@ export default function InstructorDashboard({
   // Métricas calculadas en vivo
   const liveCount = currentInstructorData.ratingsCount || currentInstructorData.totalEvaluaciones || 0;
   const liveRating = liveCount ? Number(currentInstructorData.promedioGeneral || 0).toFixed(1) : '—';
-  const liveMethodology = liveCount ? Number(currentInstructorData.promedioMetodologia || 0).toFixed(1) : '—';
-  const liveTechnical = liveCount ? Number(currentInstructorData.promedioTecnico || 0).toFixed(1) : '—';
   const liveEvaluations = currentInstructorData.evaluacionesConsolidadas || [];
+  const categoryAverage = (categoryCode) => {
+    const groups = liveEvaluations.filter(
+      (group) => Number.isFinite(group.promediosPorCategoria?.[categoryCode])
+    );
+    const responseCount = groups.reduce((total, group) => total + group.totalEvaluaciones, 0);
+    if (!responseCount) return '—';
+    const weightedAverage = groups.reduce(
+      (total, group) => total + group.promediosPorCategoria[categoryCode] * group.totalEvaluaciones,
+      0
+    ) / responseCount;
+    return weightedAverage.toFixed(1);
+  };
   const liveFeedbackCount = liveEvaluations.reduce(
     (count, group) => count + (group.comentarios?.length || 0),
     0
@@ -153,12 +179,22 @@ export default function InstructorDashboard({
               <Activity className="w-3 h-3 text-[#39A900]" />
               Guardado en el sistema; Coordinación lo verá al actualizar el panel.
             </p>
+            <button
+              type="button"
+              onClick={handleDownloadReport}
+              disabled={downloadingReport}
+              className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-[#00324D] px-3 py-2 text-xs font-bold text-white hover:bg-[#004466] disabled:cursor-wait disabled:opacity-60"
+            >
+              <Download className="h-4 w-4" />
+              {downloadingReport ? 'Preparando informe...' : 'Descargar informe PDF'}
+            </button>
+            {reportError && <p role="alert" className="mt-2 text-xs text-red-700">{reportError}</p>}
           </div>
 
         </div>
 
         {/* Competencies Ribbon Actualizado en Vivo */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mt-8 pt-6 border-t border-slate-100">
+        <div className="grid grid-cols-2 sm:grid-cols-5 gap-4 mt-8 pt-6 border-t border-slate-100">
           <div className="p-3 bg-amber-50/70 rounded-2xl border border-amber-100">
             <span className="text-[11px] font-bold text-amber-900 block">Calificación General</span>
             <div className="flex items-center gap-1.5 mt-1">
@@ -171,24 +207,35 @@ export default function InstructorDashboard({
           </div>
 
           <div className="p-3 bg-emerald-50/70 rounded-2xl border border-emerald-100">
-            <span className="text-[11px] font-bold text-emerald-900 block">Metodología</span>
+            <span className="text-[11px] font-bold text-emerald-900 block">Pedagógicas y didácticas</span>
             <div className="flex items-center gap-1.5 mt-1">
               <span className="w-2.5 h-2.5 rounded-full bg-[#39A900]"></span>
               <span className="text-2xl font-black text-emerald-950">
-                {liveMethodology}
+                {categoryAverage('pedagogicas')}
               </span>
               <span className="text-xs text-emerald-800">/ 5.0</span>
             </div>
           </div>
 
           <div className="p-3 bg-sky-50/70 rounded-2xl border border-sky-100">
-            <span className="text-[11px] font-bold text-sky-900 block">Dominio Técnico</span>
+            <span className="text-[11px] font-bold text-sky-900 block">Comunicativas y relacionales</span>
             <div className="flex items-center gap-1.5 mt-1">
               <span className="w-2.5 h-2.5 rounded-full bg-[#00324D]"></span>
               <span className="text-2xl font-black text-sky-950">
-                {liveTechnical}
+                {categoryAverage('comunicativas')}
               </span>
               <span className="text-xs text-sky-800">/ 5.0</span>
+            </div>
+          </div>
+
+          <div className="p-3 bg-violet-50/70 rounded-2xl border border-violet-100">
+            <span className="text-[11px] font-bold text-violet-900 block">Compromiso y cumplimiento</span>
+            <div className="flex items-center gap-1.5 mt-1">
+              <span className="w-2.5 h-2.5 rounded-full bg-violet-600"></span>
+              <span className="text-2xl font-black text-violet-950">
+                {categoryAverage('compromiso')}
+              </span>
+              <span className="text-xs text-violet-800">/ 5.0</span>
             </div>
           </div>
 
@@ -406,18 +453,23 @@ export default function InstructorDashboard({
 
                     <div className="flex items-center gap-2">
                       <span className="text-xs font-bold text-amber-900 bg-amber-50 px-2 py-0.5 rounded-md border border-amber-200">
-                        ★ {((item.promedioMetodologia + item.promedioTecnico) / 2).toFixed(1)} / 5.0
+                        ★ {Number(item.promedioGeneral || 0).toFixed(1)} / 5.0
                       </span>
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-2">
-                    <span className="text-[11px] bg-slate-50 border border-slate-200 px-2.5 py-0.5 rounded-md font-semibold text-slate-700">
-                      Metodología: <strong className="text-[#39A900]">{item.promedioMetodologia}/5</strong>
-                    </span>
-                    <span className="text-[11px] bg-slate-50 border border-slate-200 px-2.5 py-0.5 rounded-md font-semibold text-slate-700">
-                      Dominio Técnico: <strong className="text-[#00324D]">{item.promedioTecnico}/5</strong>
-                    </span>
+                  <div className="flex flex-wrap gap-2">
+                    {[
+                      ['pedagogicas', 'Pedagógicas y didácticas'],
+                      ['comunicativas', 'Comunicativas y relacionales'],
+                      ['compromiso', 'Compromiso y cumplimiento'],
+                    ].map(([code, label]) => (
+                      item.promediosPorCategoria?.[code] !== undefined && (
+                        <span key={code} className="text-[11px] bg-slate-50 border border-slate-200 px-2.5 py-0.5 rounded-md font-semibold text-slate-700">
+                          {label}: <strong className="text-[#39A900]">{item.promediosPorCategoria[code]}/5</strong>
+                        </span>
+                      )
+                    ))}
                   </div>
 
                   <ul className="space-y-2">

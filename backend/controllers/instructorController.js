@@ -1,4 +1,5 @@
 const instructorService = require('../services/instructorService');
+const instructorReportService = require('../services/instructorReportService');
 const { asyncHandler } = require('../middlewares/errorHandler');
 
 /**
@@ -40,6 +41,20 @@ class InstructorController {
       success: true,
       data: instructor,
     });
+  });
+
+  downloadMyReport = asyncHandler(async (req, res) => {
+    const pdf = await instructorReportService.generateInstructorReportPdf(req.user._id);
+
+    res
+      .status(200)
+      .set({
+        'Content-Type': 'application/pdf',
+        'Content-Disposition': `attachment; filename="informe-retroalimentacion-${req.user._id}.pdf"`,
+        'Cache-Control': 'private, no-store',
+        'Content-Length': pdf.length,
+      })
+      .send(pdf);
   });
 
   /**

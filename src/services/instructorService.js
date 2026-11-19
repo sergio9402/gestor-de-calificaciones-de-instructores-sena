@@ -1,4 +1,4 @@
-import { apiRequest } from './apiClient';
+import { apiDownload, apiRequest } from './apiClient';
 
 async function getData(path, options) {
   const response = await apiRequest(path, options);
@@ -22,4 +22,8 @@ export function updateInstructorStatus(id, estado) {
     method: 'PATCH',
     body: JSON.stringify({ estado }),
   });
+}
+
+export function downloadInstructorReport() {
+  return apiDownload('/instructors/me/report.pdf');
 }

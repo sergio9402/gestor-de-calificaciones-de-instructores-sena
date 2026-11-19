@@ -1,7 +1,7 @@
 const { createHash, randomBytes } = require('node:crypto');
 const PasswordResetToken = require('../models/PasswordResetToken');
-const User = require('../models/User');
 const emailService = require('../config/email');
+const { findProfileByEmail, findProfileById } = require('./userProfileService');
 
 const TOKEN_TTL_MS = 30 * 60 * 1000;
 const hashToken = (token) => createHash('sha256').update(token).digest('hex');
@@ -11,10 +11,7 @@ class PasswordResetService {
   async requestReset(email) {
     emailService.getEmailConfig();
 
-    const user = await User.findOne({
-      email: email.toLowerCase().trim(),
-      activo: { $ne: false },
-    }).select('_id email');
+    const user = await findProfileByEmail(email);
 
     if (!user) return;
 
@@ -73,12 +70,13 @@ class PasswordResetService {
       throw httpError(400, 'El enlace no es válido o ya venció. Solicita uno nuevo.');
     }
 
-    const user = await User.findOne({
-      _id: resetToken.userId,
-      activo: { $ne: false },
-    }).select('+password +authVersion');
+    const user = await findProfileById(
+      resetToken.userId,
+      undefined,
+      '+password +authVersion'
+    );
 
-    if (!user) {
+    if (!user || user.activo === false) {
       throw httpError(400, 'El enlace no es válido o ya venció. Solicita uno nuevo.');
     }
 

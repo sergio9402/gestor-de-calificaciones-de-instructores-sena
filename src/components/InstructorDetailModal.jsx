@@ -7,8 +7,6 @@ export default function InstructorDetailModal({ instructor, isOpen, onClose, onE
 
   const totalEvaluations = instructor.totalEvaluaciones || 0;
   const ratingVal = totalEvaluations ? Number(instructor.promedioGeneral || 0).toFixed(1) : '—';
-  const methVal = totalEvaluations ? Number(instructor.promedioMetodologia || 0).toFixed(1) : '—';
-  const techVal = totalEvaluations ? Number(instructor.promedioTecnico || 0).toFixed(1) : '—';
   const instName = instructor.name || instructor.nombre || 'Instructor';
   const instModule = instructor.module || instructor.especialidad || 'Módulo de Formación';
   const instCenter = instructor.center || instructor.centro || 'Centro SENA';
@@ -17,6 +15,18 @@ export default function InstructorDetailModal({ instructor, isOpen, onClose, onE
     (count, group) => count + (group.comentarios?.length || 0),
     0
   );
+  const categoryAverage = (categoryCode) => {
+    const groups = evaluationsList.filter(
+      (group) => Number.isFinite(group.promediosPorCategoria?.[categoryCode])
+    );
+    const responseCount = groups.reduce((total, group) => total + group.totalEvaluaciones, 0);
+    if (!responseCount) return '—';
+    const weightedAverage = groups.reduce(
+      (total, group) => total + group.promediosPorCategoria[categoryCode] * group.totalEvaluaciones,
+      0
+    ) / responseCount;
+    return weightedAverage.toFixed(1);
+  };
 
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 animate-in fade-in duration-200">
@@ -57,7 +67,7 @@ export default function InstructorDetailModal({ instructor, isOpen, onClose, onE
         </div>
 
         {/* Score Summary Strip */}
-        <div className="grid grid-cols-3 bg-slate-50 border-b border-slate-200 divide-x divide-slate-200 p-4 text-center">
+        <div className="grid grid-cols-4 bg-slate-50 border-b border-slate-200 divide-x divide-slate-200 p-4 text-center">
           <div>
             <span className="text-[11px] text-slate-500 font-medium block">Promedio General</span>
             <div className="flex items-center justify-center gap-1 mt-1">
@@ -66,17 +76,24 @@ export default function InstructorDetailModal({ instructor, isOpen, onClose, onE
             </div>
           </div>
           <div>
-            <span className="text-[11px] text-slate-500 font-medium block">Metodología</span>
+            <span className="text-[11px] text-slate-500 font-medium block">Pedagógicas</span>
             <div className="flex items-center justify-center gap-1 mt-1">
               <span className="w-2.5 h-2.5 rounded-full bg-[#39A900]"></span>
-              <span className="text-xl font-black text-slate-900">{methVal}</span>
+              <span className="text-xl font-black text-slate-900">{categoryAverage('pedagogicas')}</span>
             </div>
           </div>
           <div>
-            <span className="text-[11px] text-slate-500 font-medium block">Dominio Técnico</span>
+            <span className="text-[11px] text-slate-500 font-medium block">Comunicativas</span>
             <div className="flex items-center justify-center gap-1 mt-1">
               <span className="w-2.5 h-2.5 rounded-full bg-[#00324D]"></span>
-              <span className="text-xl font-black text-slate-900">{techVal}</span>
+              <span className="text-xl font-black text-slate-900">{categoryAverage('comunicativas')}</span>
+            </div>
+          </div>
+          <div>
+            <span className="text-[11px] text-slate-500 font-medium block">Compromiso</span>
+            <div className="flex items-center justify-center gap-1 mt-1">
+              <span className="w-2.5 h-2.5 rounded-full bg-violet-600"></span>
+              <span className="text-xl font-black text-slate-900">{categoryAverage('compromiso')}</span>
             </div>
           </div>
         </div>
@@ -97,7 +114,7 @@ export default function InstructorDetailModal({ instructor, isOpen, onClose, onE
           {evaluationsList.length > 0 ? (
             <div className="space-y-3">
               {evaluationsList.map((evalItem) => {
-                const itemRating = ((evalItem.promedioMetodologia + evalItem.promedioTecnico) / 2).toFixed(1);
+                const itemRating = Number(evalItem.promedioGeneral || 0).toFixed(1);
                 return (
                   <div 
                     key={`${evalItem.fichaId}-${evalItem.periodo}`}
@@ -117,14 +134,18 @@ export default function InstructorDetailModal({ instructor, isOpen, onClose, onE
                       </div>
                     </div>
 
-                    {/* Competencies Badges in review */}
                     <div className="flex flex-wrap gap-2 mb-2">
-                      <span className="text-[11px] bg-white border border-slate-200 px-2 py-0.5 rounded-md text-slate-600">
-                        Metodología promedio: <strong className="text-emerald-700">{evalItem.promedioMetodologia}/5</strong>
-                      </span>
-                      <span className="text-[11px] bg-white border border-slate-200 px-2 py-0.5 rounded-md text-slate-600">
-                        Dominio Técnico promedio: <strong className="text-[#00324D]">{evalItem.promedioTecnico}/5</strong>
-                      </span>
+                      {[
+                        ['pedagogicas', 'Pedagógicas y didácticas'],
+                        ['comunicativas', 'Comunicativas y relacionales'],
+                        ['compromiso', 'Compromiso y cumplimiento'],
+                      ].map(([code, label]) => (
+                        evalItem.promediosPorCategoria?.[code] !== undefined && (
+                          <span key={code} className="text-[11px] bg-white border border-slate-200 px-2 py-0.5 rounded-md text-slate-600">
+                            {label}: <strong className="text-emerald-700">{evalItem.promediosPorCategoria[code]}/5</strong>
+                          </span>
+                        )
+                      ))}
                     </div>
 
                     <ul className="space-y-2">
