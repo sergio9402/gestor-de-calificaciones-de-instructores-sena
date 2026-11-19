@@ -28,6 +28,14 @@ function createApp() {
   app.use(express.json());
   app.use(express.urlencoded({ extended: true }));
 
+  app.get('/', (req, res) => {
+    res.status(200).json({
+      status: 'OK',
+      service: 'Sistema de Evaluación SENA - API Backend',
+      health: '/api/health',
+    });
+  });
+
   app.get('/api/health', (req, res) => {
     res.status(200).json({
       status: 'OK',
