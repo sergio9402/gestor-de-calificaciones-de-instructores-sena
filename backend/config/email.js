@@ -66,12 +66,13 @@ async function sendPasswordResetEmail(email, token) {
     port: config.port,
     secure: config.secure,
     requireTLS: !config.secure,
+    family: 4,
     auth: {
       user: config.user,
       pass: config.password,
     },
-    connectionTimeout: 10000,
-    greetingTimeout: 10000,
+    connectionTimeout: 15000,
+    greetingTimeout: 15000,
     socketTimeout: 20000,
   });
 
