@@ -9,6 +9,8 @@ const managementRoutes = require('./routes/managementRoutes');
 
 function createApp() {
   const app = express();
+  app.set('trust proxy', 1);
+
   const allowedOrigins = (
     process.env.CLIENT_ORIGINS ||
     'http://localhost:3000,http://localhost:5173'
